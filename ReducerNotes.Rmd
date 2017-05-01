@@ -66,9 +66,9 @@ Consider an example with $p=4$ and $k=1$.  If $\alpha$ and $\beta$ are both in $
 
 ```{r}
 
-p <- 4
-alpha <- c(1, -1, 0, 0)/sqrt(2)
-beta <- c(1, 0, 1, 0)/sqrt(2)
+p <- 5
+alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
 
 library(mvtnorm)
 library(rstiefel)
@@ -82,12 +82,12 @@ A <- diag(p) - alpha %*% t(alpha)
 B <- diag(p) - beta %*% t(beta)
 
 # choose a random plane in the nullspace of alpha 
-mixer <- rustiefel(3, 2)
-z <- eigen(A)$vectors[, 1:3] %*% mixer
+mixer <- rustiefel(p-1, 2)
+z <- eigen(A)$vectors[, 1:(p-1)] %*% mixer
 
 # choose the direction in the nullspace of beta orthogonal
 # To z
-w <- eigen(B - z %*% t(z))$vectors[, 1]
+w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:2]
 
 ## M is now a rank (p-1) projection matrix
 M <- z %*% t(z) + w %*% t(w)
@@ -116,5 +116,61 @@ plot(mr, er)
 print(cor(mr, er))
 ```
 
+### Example where dimension of $\alpha$ is larger
+```{r}
+p <- 50
+k <- 25
+
+alpha <- rustiefel(p, k)
+eps <- rnorm(p)
+eps <- eps/sqrt(sum(eps^2))
+beta <- (alpha %*% rustiefel(k, 1)) + eps
+beta <- beta/sqrt(sum(beta^2))
 
 
+library(mvtnorm)
+library(rstiefel)
+
+X <- rmvnorm(1e4, rep(0, p), diag(1, p))
+m <- X %*% alpha
+e <- X %*% beta
+
+## projection matrices into the nullspaces of alpha and beta
+A <- diag(p) - alpha %*% t(alpha)
+B <- diag(p) - beta %*% t(beta)
+
+## vectors in null space of alpha and beta
+z <- eigen(A)$vectors[, 1:(p-k)]
+w <- eigen(B - z %*% t(z))$vectors[, 1:(k-1)]
+
+z <- eigen(A)$vectors[, 1:(p-k)] %*% rustiefel(p-k, 20)
+w <- eigen(B - z %*% t(z))$vectors[, 1:(p-ncol(z)-1)]
+
+## M is now a rank (p-1) projection matrix
+M <- w %*% t(w) + z %*% t(z)
+
+## verify zero condition holds
+t(alpha) %*% M %*% beta
+
+## gamma is now the eigenvector of I - M
+eig <- eigen(diag(p) - M)
+g <- eig$vectors[, 1]
+
+# should be exactly one eigenvalue equal to 1 (rest are 0)
+eig$values
+
+## verify
+s1 <- X %*% g
+
+print(cor(m, s1))
+print(cor(e, s1))
+print(cor(m, e))
+mr <- lm(m ~ s1-1)$residuals
+er <- lm(e ~ s1-1)$residuals
+
+plot(mr[, 1], er)
+plot(mr[, 5], er)
+
+print(cor(mr, er))
+
+```
