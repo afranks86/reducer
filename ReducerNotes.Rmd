@@ -62,7 +62,7 @@ $$ \alpha'(I - \gamma\gamma^T)\beta = 0 $$
 
 Let $M = (I - \gamma\gamma^T)$.  Then $\alpha M\beta' = 0$ implies that $\alpha M$ is in the null space of $\beta$ **or** $M\beta'$ is in the nullspace of $\alpha$.  For a $k$-dimensional reducer $\gamma$, this implies that $M$ is a rank ($p - k$) projection matrix into a subspace of the null spaces of $\alpha$ and/or $\beta$.
 
-Consider an example with $p=4$ and $k=1$.  If $\alpha$ and $\beta$ are both in $R^1$ then their null spaces span a three dimensional subspace of $R^4$.  If $M = (I - \alpha\alpha')$ or $M = (I - \beta\beta')$ then clearly the solution is $\alpha$ or $\beta$.  The interestingsolutions are the ones in which $M$ is a projection into a subspace of the nullspace of both $\alpha$ *and* a subspace of the nullspace of $\beta$.  Thus, we can choose $M$ so that 2 dimensions are in the span of the nullspace of $\alpha$ and the third dimension is in the nullspace of $\beta$ (or vice versa).
+Consider an example with $p=4$ and $k=1$.  If $\alpha$ and $\beta$ are both in $R^1$ then their null spaces span a three dimensional subspace of $R^4$.  If $M = (I - \alpha\alpha')$ or $M = (I - \beta\beta')$ then clearly the solution is $\alpha$ or $\beta$.  The interesting solutions are the ones in which $M$ is a projection into a subspace of the nullspaces of both $\alpha$ *and* $\beta$.  For example, we can choose $M$ so that 2 dimensions are in the span of the nullspace of $\alpha$ and the third dimension is in the nullspace of $\beta$ (or vice versa).
 
 ```{r}
 
