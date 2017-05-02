@@ -1,7 +1,6 @@
 ---
-title: "Franks Reducer notes"
-author: "Alexander Franks"
-date: "4/23/2017"
+title: "Reducer notes"
+author: "Alexander D'Amour and Alexander Franks"
 output:
   html_document: default
   pdf_document: default
@@ -11,6 +10,30 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+Reducer
+
+The goal of the reducer is to take an outcome model $m_0(x)$ and a treatment model $e(X)$ and to identify a function conditional on which the two are orthogonal.
+
+With unconfoundedness in $X$, we have
+$$
+\begin{align}
+Cov(Y(0), T \mid s(X)) &= E[Cov(Y(0), T \mid X) \mid s(X)] + Cov(E[Y(0) \mid X], E[T \mid X] \mid  s(X))\\
+&= Cov(m_0(X), e(X) \mid s(X)).
+\end{align}
+$$
+
+The condition for a reducer $s(X)$ is:
+$$
+Cov(m_0(X), e(X) \mid s(X)) = 0 \quad \forall X
+$$
+
+or
+
+$$
+MI(m_0(X), e(X) \mid s(X)) = E\left[ \log\left(\frac{p(m_0(X), e(X))}{p(m_0(X))p(e(X))}\right) \mid s(X)\right] = 0 \quad \forall X
+$$
+
 
 # SNoTE
 Consider both linear mean and propensity models. Assume that $r(X)$ is also linear in $X$.
@@ -118,8 +141,8 @@ print(cor(mr, er))
 
 ### Example where dimension of $\alpha$ is larger
 ```{r}
-p <- 50
-k <- 25
+p <- 200
+k <- 30
 
 alpha <- rustiefel(p, k)
 eps <- rnorm(p)
@@ -157,20 +180,22 @@ eig <- eigen(diag(p) - M)
 g <- eig$vectors[, 1]
 
 # should be exactly one eigenvalue equal to 1 (rest are 0)
-eig$values
+print(head(eig$values))
 
 ## verify
 s1 <- X %*% g
 
-print(cor(m, s1))
+print(summary(cor(m, s1)))
+print(summary(cor(m, e)))
 print(cor(e, s1))
-print(cor(m, e))
+print(cor(lm(e ~ m-1)$fitted.values, e))
+print(cor(lm(e ~ m-1)$fitted.values, s1))
 mr <- lm(m ~ s1-1)$residuals
 er <- lm(e ~ s1-1)$residuals
 
 plot(mr[, 1], er)
 plot(mr[, 5], er)
 
-print(cor(mr, er))
+print(summary(cor(mr, er)))
 
 ```
