@@ -11,37 +11,87 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Reducer
+# Setup and Motivation
 
-The goal of the reducer is to take an outcome model $m_0(x)$ and a treatment model $e(X)$ and to identify a function conditional on which the two are orthogonal.
+## Causal effect estimation and overlap
 
-With unconfoundedness in $X$, we have
+Consider an observational study where we model the data as iid triples $((Y(0), Y(1)), T, X) \sim P$ of potential outcomes, treatment, and covariates, drawn from some superpopulation with distribution $P$. 
+Let $P_0(X) := P(X \mid T = 0)$ and $P_1(X) = P(X \mid T = 1)$.
+Let $e(X) = P(T = 1 \mid X)$.
+Identifcation of the ATE of $T$
+$$
+\tau^{ATE} := E_P[Y(1) - Y(0)]
+$$
+depends on two key assumptions.
 $$
 \begin{align}
-Cov(Y(0), T \mid s(X)) &= E[Cov(Y(0), T \mid X) \mid s(X)] + Cov(E[Y(0) \mid X], E[T \mid X] \mid  s(X))\\
-&= Cov(m_0(X), e(X) \mid s(X)).
+(Y(0), Y(1)) \perp T \mid X \quad \text{and} \quad 0 < e(X) < 1.
+\end{align}
+$$
+These are the **unconfoundedness** and **overlap** conditions, respectively.
+Under these assumptions, $\tau^{ATE}$ is identified by the observable functional
+$$
+\tau^{ATE} = E_P[E_P[Y^{obs} \mid X, T = 1] - E_P[Y^{obs} | X, T = 0]].
+$$
+To make uniform inferential guarantees about estimates of $\tau^{ATE}$, it is common to require that $e(X)$ be bounded away from 0 and 1 by some constant $\eta \in (0, 1/2)$:
+$$
+\eta < e(X) < 1-\eta.
+$$
+In many cases, particularly when $X$ is high-dimensional, this assumption may not hold for a particular data-generating process $P$.
+
+This motivates finding a reduction of $X$, $d(X)$, such that overlap holds in the reduction $d(X)$:
+$$
+\eta < e_d(X) := P(T = 1 \mid ) < 1-\eta.
+$$
+If $d(X)$ satisfies this condition, the following functional is identified: 
+$$
+\tau^{ATE}_d = E_P[E_P[Y^{obs} \mid d(X), T = 1] - E_P[Y^{obs} \mid d(X), T = 0]].
+$$
+
+The bias induced by conditioning on $d(X)$ instead of $X$ is
+$$
+\tau^{ATE} - \tau_d^{ATE} = E_P\left[\frac{Cov(Y(1), X \mid d(X))}{e(X)} + \frac{Cov(Y(0), X \mid d(X))}{1-e(X)} \right].
+$$
+
+Ideally, we would search for a reduction $d(X)$ that induces no bias.
+One sufficient condition is that:
+$$
+Cov(Y(t), T \mid d(X)) = 0 \quad \text{for } t = 0, 1, \text{ w.p. 1}.
+$$
+
+Note that, under unconfoundedness, $Cov(Y(t), T \mid X) = 0$ for all $X$.
+Letting $m_t(X) := E[Y(t) \mid X]$,
+$$
+\begin{align}
+Cov(Y(t), T \mid d(X)) &= E[ Cov(Y(t), T \mid X) \mid d(X) ] + Cov( E[Y(t) \mid X], E[T \mid X] \mid d(X) )\\
+&= Cov( m_t(X), e(X) \mid d(X)).
 \end{align}
 $$
 
-The condition for a reducer $s(X)$ is:
+Thus, a sufficient condition for unbiasedness is that $d(X)$ satisfies
 $$
-Cov(m_0(X), e(X) \mid s(X)) = 0 \quad \forall X
+Cov(m_t(X), e(X) \mid d(X)) = 0 \quad \text{for } t = 0, \text{ w.p. }1.
 $$
 
-or
+The goal of the reducer is to take an outcome model $m_0(x)$ and a treatment model $e(X)$ and to identify a function $d(X)$ conditional on which the two are orthogonal.
 
+**Remark**:
+We could also balance bias and variance, by considering the semiparametric efficiency bound:
 $$
-MI(m_0(X), e(X) \mid s(X)) = E\left[ \log\left(\frac{p(m_0(X), e(X))}{p(m_0(X))p(e(X))}\right) \mid s(X)\right] = 0 \quad \forall X
+V^{eff} = E_P\left[\frac{Var(Y(1) \mid d(X))}{e_d(X)}
++ \frac{Var(Y(0) \mid d(X))}{1-e_d(X)} + (\tau_d(X) - \tau^{ATE})^2\right],
 $$
+where $\tau_d(X)$ is the conditional average treatment effect given $d(X)$, $E[Y(1) - Y(0) \mid d(X)]$.
+
 
 
 # SNoTE
 Consider both linear mean and propensity models. Assume that $r(X)$ is also linear in $X$.
 $$
 \begin{align}
-m_0(X) &= \mathbf{\alpha}'X\\
-e(X) &= \mathbf{\beta}'X\\
-r(X) &= \gamma'X
+m_0(X) &= \mathbf{\alpha}'X \quad \text{(Expectation of control outcome)}\\
+e(X) &= \mathbf{\beta}'X \quad \text{(Propensity score)}\\
+d(X) &= \gamma'X \quad \text{(Deconfounding score)}
 \end{align}
 $$
 where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
