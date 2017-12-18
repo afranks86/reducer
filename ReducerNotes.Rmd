@@ -129,8 +129,119 @@ $$
 which implies that 
 $$ \alpha' (\Sigma - \Sigma\gamma (\gamma' \Sigma \gamma)^{-1}\gamma'\Sigma)\beta = 0$$
 
+### Special Case: $X$ has identity covariance, $X \in \mathbb R^3$
+Special case $\Sigma = I$; $\alpha, \beta, \gamma$ all vectors in $\mathbb R^3$.
+$$
+(\gamma'\gamma)(\alpha'\beta) = (\gamma'\alpha)(\beta'\gamma)\quad \Rightarrow \quad
+\gamma' (I \alpha'\beta - \alpha\beta') \gamma = 0
+$$
 
-### Solution space for $\gamma$
+**Interpretation of condition**:
+If $\gamma$, $\alpha$, $\beta$ are all normalized, says that correlation between $\alpha$ and $\beta$ must be smaller than correlation between $\gamma$ and $\alpha$ and $\gamma$ and $\beta$.
+In particular $\alpha$ is $\gamma$ that is the least correlated with $\beta$. As a result, we have the following conjecture.
+
+**Conjecture**:
+The prognostic score is the overlap maximizing deconfounding score.
+
+This defines a quadric surface of solutions $\gamma$. We can characterize the surface in terms of the eigenvalues of the symmetrized matrix $A$ defined as:
+$$
+\begin{align}
+\tilde A &= I\alpha'\beta - \alpha \beta'\\
+A &= \frac{1}{2}(\tilde A + \tilde A')
+\end{align}
+$$
+Note that $\gamma' \tilde A \gamma = 0$ implies $\gamma' A \gamma = 0$.
+If $A$ has two positive eigenvalues and one negative eigenvalue, then the surface of solutions is a cone.
+
+**Conjecture**: $\gamma = \alpha$ and $\gamma = \beta$ are also clearly solutions. Thus, the surface should always contain $\alpha$ and $\beta$.
+
+Code to construct and characterize matrix $A$:
+```{r}
+diagnostic <- FALSE
+alpha <- c(1, -1, 0)
+beta <- c(1, 0, 1)
+
+redA <- function(alpha, beta){
+  Atilde <- diag(sum(alpha*beta), length(alpha)) - (alpha %*% t(beta))
+  A <- (Atilde + t(Atilde))/2
+}
+A <- redA(alpha, beta)
+eigs <- eigen(A)
+if(diagnostic){
+  print(A)
+  print(eigs)
+}
+
+cone_params <- eigs$values
+S <- rotation <- eigs$vectors
+```
+
+Strategy to find solutions $\gamma$. In rotated coordinates $x$, $y$, $z$, with $z$ set to the coordinate with negative eigenvalue, WLOG, fix $z = |\lambda_3|^{-1/2}$ and characterize resulting ellipse given by:
+$$
+\lambda_1 x^2 + \lambda_2 y^2 = 1
+$$
+We can now parameterize the solutions for $\gamma$ in terms of $t$:
+$$
+\gamma(t) = S\left( \begin{array}{c} x(t)\\y(t)\\z(t) \end{array}\right)
+ = S\left( \begin{array}{c}\lambda_1^{-1/2} \cos(t)\\\lambda_2^{-1/2} \sin(t)\\|\lambda_3|^{-1/2} \end{array}\right)
+$$
+Where $S'$ is the transpose of the matrix of eigenvectors of $A$.
+
+```{r}
+gamma_sol <- function(t, cone_params, S){
+  S %*% c(cone_params[1]^(-1/2) * cos(t),
+          cone_params[2]^(-1/2) * sin(t),
+          abs(cone_params[3])^(-1/2))
+}
+
+vnorm <- function(v){
+  sqrt(sum(v^2))
+}
+
+g1 <- gamma_sol(3*pi/2, cone_params, S)
+g2 <- gamma_sol(pi/2, cone_params, S)
+g3 <- gamma_sol(pi/3, cone_params, S)
+
+```
+
+Testing:
+```{r}
+library(mvtnorm)
+X <- rmvnorm(1e4, rep(0, 3), diag(1, 3))
+m <- X %*% alpha
+e <- X %*% beta
+
+for(g in list(g1, g2, g3)){
+  s1 <- X %*% g
+  print(sprintf("thing: %f", g))
+  print(cor(m, s1))
+  print(cor(e, s1))
+  mr <- lm(m ~ s1-1)$residuals
+  er <- lm(e ~ s1-1)$residuals
+  plot(mr, er)
+  print(cor(mr, er))
+}
+par(mfrow=c(1,2))
+plot(s1, m)
+plot(s1, e)
+
+mr <- lm(m ~ s1-1)$residuals
+er <- lm(e ~ s1-1)$residuals
+plot(mr, er)
+
+plot(seq(0, 2*pi, by=.05)/pi, sapply(seq(0, 2*pi, by=.05), function(t) cor(X %*% gamma_sol(t, cone_params, S), e)^2), type='l')
+
+that <- optimize(function(t) cor(X %*% gamma_sol(t, cone_params, S), e)^2,
+                             c(0, 2*pi))$minimum
+ghat <- gamma_sol(that, cone_params, S)
+shat <- X %*% ghat
+print(that/pi)
+print(cor(m,e))
+print(cor(shat,e))
+print(cor(shat,m))
+```
+
+### General solution space for $\gamma$
 
 Assume welog that $\Sigma = I$ and $\gamma$, $\alpha$ and $\beta$ are semi-orthogonal matrices.  Then the above condition is equivalent to
 $$ \alpha'(I - \gamma\gamma^T)\beta = 0 $$
