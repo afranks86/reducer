@@ -50,7 +50,7 @@ $$
 
 The bias induced by conditioning on $d(X)$ instead of $X$ is
 $$
-\tau^{ATE} - \tau_d^{ATE} = E_P\left[\frac{Cov(Y(1), X \mid d(X))}{e(X)} + \frac{Cov(Y(0), X \mid d(X))}{1-e(X)} \right].
+\tau^{ATE} - \tau_d^{ATE} = E_P\left[\frac{Cov(Y(1), T \mid d(X))}{e(X)} + \frac{Cov(Y(0), T \mid d(X))}{1-e(X)} \right].
 $$
 
 Ideally, we would search for a reduction $d(X)$ that induces no bias.
@@ -97,6 +97,8 @@ $$
 where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
 
 
+
+
 ### Partial Correlation Condition
 $$
 \begin{align}
@@ -135,11 +137,31 @@ $$ \alpha'(I - \gamma\gamma^T)\beta = 0 $$
 
 Let $M = (I - \gamma\gamma^T)$.  Then $\alpha M\beta' = 0$ implies that $\alpha M$ is in the null space of $\beta$ **or** $M\beta'$ is in the nullspace of $\alpha$.  For a $k$-dimensional reducer $\gamma$, this implies that $M$ is a rank ($p - k$) projection matrix into a subspace of the null spaces of $\alpha$ and/or $\beta$.
 
-Consider an example with $p=4$ and $k=1$.  If $\alpha$ and $\beta$ are both in $R^1$ then their null spaces span a three dimensional subspace of $R^4$.  If $M = (I - \alpha\alpha')$ or $M = (I - \beta\beta')$ then clearly the solution is $\alpha$ or $\beta$.  The interesting solutions are the ones in which $M$ is a projection into a subspace of the nullspaces of both $\alpha$ *and* $\beta$.  For example, we can choose $M$ so that 2 dimensions are in the span of the nullspace of $\alpha$ and the third dimension is in the nullspace of $\beta$ (or vice versa).
+Consider an example with $p=5$ and $k=1$.  If $\alpha$ and $\beta$ are both in $R^1$ then their null spaces span a three dimensional subspace of $R^4$.  If $M = N_\alpha = (I - \alpha\alpha')$ or $M = N_\beta = (I - \beta\beta')$ then clearly $\gamma=\alpha$ or $\gamma=\beta$ are solutions.  
+
+More generally, we can write as $M = N_\alpha \bigoplus N_\beta$.  
+
+The interesting solutions are the ones in which $M$ is a projection into a subspace of the nullspaces of both $\alpha$ *and* $\beta$.  For example, we can choose $M$ so that for any $s < p-1$, $s$ dimensions are in the span of the nullspace of $\alpha$ and the $p-s-1$ dimension are in the nullspace of $\beta$.
+
+The steps in the algorithm which yield a valid solution are:
+
+1. Identify the null space of $\alpha$, $N_\alpha$
+    + select a random set of coordinate directions $z$ so that $zz^T$ is a projection matrix into a subspace of $N_\alpha$
+2. Identify the null space of $\beta$ outside the nullspace of $\alpha$: $N_{\beta/\alpha}$
+    + select a random set of coordinate directions $w$ so that $ww^T$ is a projection $N_{\beta/\alpha}$
+3. Define $M$ to be the projection matrix into $span(ww^T + zz^T)$ .  If $M$ is rank $p-k$ then $d(X)$ will be $k$-dimensional
+4. Let $g$ be the first $k$ eigenvectors of $I - M$
+5. $d(X) = g'X$
+
+I think this yields an exhaustive set of solutions but haven't figured out a good way to  parameterize to control the correlation of $d(X)$ with $\alpha$ and $\beta$.
+
+In this SNOTE we assume that $m_0$, $e$ and $d$ are all 1 dimensional.  
 
 ```{r}
 
-p <- 5
+p <- 12
+d_dimension <- p/4
+
 alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
 beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
 
@@ -154,49 +176,63 @@ e <- X %*% beta
 A <- diag(p) - alpha %*% t(alpha)
 B <- diag(p) - beta %*% t(beta)
 
-# choose a random plane in the nullspace of alpha 
-mixer <- rustiefel(p-1, 2)
-z <- eigen(A)$vectors[, 1:(p-1)] %*% mixer
 
-# choose the direction in the nullspace of beta orthogonal
-# To z
-w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:2]
+# A is a rank p-1 matrix, choose p/2 dimensional subspace of A
+# p/2 is arbitrary but should balance alpha/beta contribution 
+z <- eigen(A)$vectors[, 1:(p-1)] %*% rustiefel(p-1, p/2)
+w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p/2-1)]
+u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
+M <- u %*% t(u)
 
-## M is now a rank (p-1) projection matrix
-M <- z %*% t(z) + w %*% t(w)
 
 ## verify zero condition holds
 alpha %*% M %*% beta
+alpha %*% M %*% M %*% beta
 
 ## gamma is now the eigenvector of I - M
 eig <- eigen(diag(p) - M)
-g <- eig$vectors[, 1]
 
 # should be exactly one eigenvalue equal to 1 (rest are 0)
 eig$values
 
-## verify
-s1 <- X %*% g
+g <- eig$vectors[, 1]
 
-print(cor(m, s1))
-print(cor(e, s1))
+## verify
+d <- Re(X %*% g)
+
+print(max(abs(cor(m, d))))
+print(max(abs(cor(e, d))))
 print(cor(m, e))
-mr <- lm(m ~ s1-1)$residuals
-er <- lm(e ~ s1-1)$residuals
+mr <- lm(m ~ d-1)$residuals
+er <- lm(e ~ d-1)$residuals
 
 plot(mr, er)
 
 print(cor(mr, er))
 ```
 
-### Example where dimension of $\alpha$ is larger
+### Example where the dimension of $\alpha$ is greater than 1
+
+WARNING: INCOMPLETE
+
+In this example we assume 200 dimensional covariate space, $X$, and assume a high dimensional response surface $k=30$. 
+
+- Look at example where dim($\gamma$) > 1
+- Mixing 
+- General reducer is highly correlated with the propensity score
+
+
 ```{r}
 p <- 200
 k <- 30
 
+## choose a random value for alpha p x k
 alpha <- rustiefel(p, k)
+
 eps <- rnorm(p)
 eps <- eps/sqrt(sum(eps^2))
+
+## beta is 1d propensity score
 beta <- (alpha %*% rustiefel(k, 1)) + eps
 beta <- beta/sqrt(sum(beta^2))
 
@@ -212,40 +248,49 @@ e <- X %*% beta
 A <- diag(p) - alpha %*% t(alpha)
 B <- diag(p) - beta %*% t(beta)
 
-## vectors in null space of alpha and beta
-z <- eigen(A)$vectors[, 1:(p-k)]
-w <- eigen(B - z %*% t(z))$vectors[, 1:(k-1)]
+## subspace for the nullspace of alpha and beta
 
-z <- eigen(A)$vectors[, 1:(p-k)] %*% rustiefel(p-k, 20)
-w <- eigen(B - z %*% t(z))$vectors[, 1:(p-ncol(z)-1)]
+## what are teh differences between these two?
+z <- eigen(A)$vectors[, 1:((p-k)/2)]
+w <- eigen(B - z %*% t(z))$vectors[, 1:((p-k)/2)]
 
-## M is now a rank (p-1) projection matrix
-M <- w %*% t(w) + z %*% t(z)
+u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-k)]
+M <- u %*% t(u)
 
 ## verify zero condition holds
 t(alpha) %*% M %*% beta
 
 ## gamma is now the eigenvector of I - M
 eig <- eigen(diag(p) - M)
-g <- eig$vectors[, 1]
+g <- eig$vectors[, 1:k]
 
 # should be exactly one eigenvalue equal to 1 (rest are 0)
 print(head(eig$values))
 
 ## verify
-s1 <- X %*% g
+d <- X %*% g
 
-print(summary(cor(m, s1)))
+print(summary(cor(m, d)))
 print(summary(cor(m, e)))
-print(cor(e, s1))
-print(cor(lm(e ~ m-1)$fitted.values, e))
-print(cor(lm(e ~ m-1)$fitted.values, s1))
-mr <- lm(m ~ s1-1)$residuals
-er <- lm(e ~ s1-1)$residuals
 
-plot(mr[, 1], er)
-plot(mr[, 5], er)
+## reducer is highly correlated with propensity score
+print(cor(e, d))
+print(cor(m, d))
+
+print(cor(lm(e ~ m-1)$fitted.values, e))
+print(cor(lm(e ~ m-1)$fitted.values, d))
+mr <- lm(m ~ d-1)$residuals
+er <- lm(e ~ d-1)$residuals
+
+plot(mr, er)
 
 print(summary(cor(mr, er)))
+summary(apply(mr, 2, function(mrCol) var(mrCol-er)))
 
 ```
+
+## Notes on envelope model
+
+- $X = BT + eps$
+- partial envelope?
+- heteroscedastic covariance $V\psi_tV^T$
