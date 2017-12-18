@@ -250,21 +250,21 @@ Let $M = (I - \gamma\gamma^T)$.  Then $\alpha M\beta' = 0$ implies that $\alpha 
 
 Consider an example with $p=5$ and $k=1$.  If $\alpha$ and $\beta$ are both in $R^1$ then their null spaces span a three dimensional subspace of $R^4$.  If $M = N_\alpha = (I - \alpha\alpha')$ or $M = N_\beta = (I - \beta\beta')$ then clearly $\gamma=\alpha$ or $\gamma=\beta$ are solutions.  
 
-More generally, we can write as $M = N_\alpha \bigoplus N_\beta$.  
+<!-- More generally, we can write as $M = N_\alpha \bigoplus N_\beta$.   -->
 
 The interesting solutions are the ones in which $M$ is a projection into a subspace of the nullspaces of both $\alpha$ *and* $\beta$.  For example, we can choose $M$ so that for any $s < p-1$, $s$ dimensions are in the span of the nullspace of $\alpha$ and the $p-s-1$ dimension are in the nullspace of $\beta$.
 
-The steps in the algorithm which yield a valid solution are:
+The most confusing part about this is the the repeated use of orthogonal complements.  First we work in the null space of alpha and beta, define a new subspace based on those, and then take the orthogonal complement to identify the subspace spanned for d(X).  The steps in this method, which yield a valid solution are:
 
 1. Identify the null space of $\alpha$, $N_\alpha$
     + select a random set of coordinate directions $z$ so that $zz^T$ is a projection matrix into a subspace of $N_\alpha$
 2. Identify the null space of $\beta$ outside the nullspace of $\alpha$: $N_{\beta/\alpha}$
-    + select a random set of coordinate directions $w$ so that $ww^T$ is a projection $N_{\beta/\alpha}$
-3. Define $M$ to be the projection matrix into $span(ww^T + zz^T)$ .  If $M$ is rank $p-k$ then $d(X)$ will be $k$-dimensional
+    + select a random set of coordinate directions $w$ so that $ww^T$ is a projection into a subspace of $N_{\beta/\alpha}$
+3. Define $M$ to be the projection matrix into $span(ww^T + zz^T)$ .  If $M$ is rank $p-k$ then $d(X)$ will be $k$-dimensional.
 4. Let $g$ be the first $k$ eigenvectors of $I - M$
 5. $d(X) = g'X$
 
-I think this yields an exhaustive set of solutions but haven't figured out a good way to  parameterize to control the correlation of $d(X)$ with $\alpha$ and $\beta$.
+I think any solution subspace can be represented in terms of the above procedure but haven't figured out a good way to  parameterize to control the correlation of $d(X)$ with $\alpha$ and $\beta$.
 
 In this SNOTE we assume that $m_0$, $e$ and $d$ are all 1 dimensional.  
 
@@ -284,14 +284,22 @@ m <- X %*% alpha
 e <- X %*% beta
 
 ## projection matrices into the nullspaces of alpha and beta
+
+# null space of alpha
 A <- diag(p) - alpha %*% t(alpha)
+# null space of beta
 B <- diag(p) - beta %*% t(beta)
 
-
 # A is a rank p-1 matrix, choose p/2 dimensional subspace of A
-# p/2 is arbitrary but should balance alpha/beta contribution 
+# choice p/2 is arbitrary but should balance alpha/beta contribution 
+# this is step 1
 z <- eigen(A)$vectors[, 1:(p-1)] %*% rustiefel(p-1, p/2)
+
+# choose (p/2 - 1) dimensional subspace of B\A
+# this is step 2
 w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p/2-1)]
+
+# Find the projection into the subspace spanned by z and w (step 3)
 u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
 M <- u %*% t(u)
 
@@ -300,7 +308,7 @@ M <- u %*% t(u)
 alpha %*% M %*% beta
 alpha %*% M %*% M %*% beta
 
-## gamma is now the eigenvector of I - M
+## gamma is now the eigenvector of I - M (step 4)
 eig <- eigen(diag(p) - M)
 
 # should be exactly one eigenvalue equal to 1 (rest are 0)
@@ -308,7 +316,7 @@ eig$values
 
 g <- eig$vectors[, 1]
 
-## verify
+## step 5
 d <- Re(X %*% g)
 
 print(max(abs(cor(m, d))))
@@ -393,15 +401,11 @@ print(cor(lm(e ~ m-1)$fitted.values, d))
 mr <- lm(m ~ d-1)$residuals
 er <- lm(e ~ d-1)$residuals
 
-plot(mr, er)
+plot(mr[, 1], er)
+plot(mr[, 5], er)
 
 print(summary(cor(mr, er)))
 summary(apply(mr, 2, function(mrCol) var(mrCol-er)))
 
 ```
 
-## Notes on envelope model
-
-- $X = BT + eps$
-- partial envelope?
-- heteroscedastic covariance $V\psi_tV^T$
