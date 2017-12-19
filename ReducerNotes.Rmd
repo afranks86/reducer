@@ -271,7 +271,6 @@ In this SNOTE we assume that $m_0$, $e$ and $d$ are all 1 dimensional.
 ```{r}
 
 p <- 12
-d_dimension <- p/4
 
 alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
 beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
@@ -289,6 +288,16 @@ e <- X %*% beta
 A <- diag(p) - alpha %*% t(alpha)
 # null space of beta
 B <- diag(p) - beta %*% t(beta)
+
+AnotB  <- eigen(A %*% (diag(p) - B))$vectors[, 1]
+BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
+
+## this makes d perfectly correlated with alpha
+#z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1:(p/2-1)])
+
+
+## this makes d perfectly correlated with beta
+#z <- eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1:p/2]
 
 # A is a rank p-1 matrix, choose p/2 dimensional subspace of A
 # choice p/2 is arbitrary but should balance alpha/beta contribution 
@@ -319,16 +328,76 @@ g <- eig$vectors[, 1]
 ## step 5
 d <- Re(X %*% g)
 
-print(max(abs(cor(m, d))))
-print(max(abs(cor(e, d))))
-print(cor(m, e))
+print(sprintf("Corr(d, m) = %f", cor(m, d)))
+print(sprintf("Corr(d, e) = %f", cor(e, d)))
+
 mr <- lm(m ~ d-1)$residuals
 er <- lm(e ~ d-1)$residuals
+print(sprintf("Corr(m, e | d) = %f", cor(mr, er)))
 
-plot(mr, er)
 
-print(cor(mr, er))
 ```
+
+### Exploring parameterization in terms of alpha/beta similarity with d(x)
+
+TODO: Writeup discription and understand functional for the curve below
+
+```{r}
+p <- 12
+
+alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+
+library(mvtnorm)
+library(rstiefel)
+
+X <- rmvnorm(1e4, rep(0, p), diag(1, p))
+m <- X %*% alpha
+e <- X %*% beta
+
+## projection matrices into the nullspaces of alpha and beta
+
+# null space of alpha
+A <- diag(p) - alpha %*% t(alpha)
+# null space of beta
+B <- diag(p) - beta %*% t(beta)
+
+AnotB  <- eigen(A %*% (diag(p) - B))$vectors[, 1]
+BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
+
+n <- 100
+ip <- cor_m <- cor_e <- numeric(n)
+for(i in 1:n) {
+
+  z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% rustiefel(2, 1)
+  w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
+  ip[i] <- t(z) %*% AnotB
+  
+  u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
+  M <- u %*% t(u)
+
+  ## gamma is now the eigenvector of I - M (step 4)
+  eig <- eigen(diag(p) - M)
+
+  g <- eig$vectors[, 1]
+
+  ## step 5
+  d <- Re(X %*% g)
+
+  cor_m[i] <- cor(m, d)
+  cor_e[i] <- cor(e, d)
+
+}
+
+ord <- order(abs(ip))
+plot(acos(abs(ip[ord])), abs(cor_m[ord]), pch=19, col="red", 
+     type="l", lwd=3, ylim=c(0, 1), ylab="Correlation with d(X)", xlab="Alpha angle")
+lines(acos(abs(ip[ord])), abs(cor_e[ord]), pch=19, col="blue", lwd=3)
+abline(h=cor(e, m), lty=2)
+legend("bottomleft", legend=c("Alpha", "Beta", "Cor(m,e)"), col=c("red", "blue", "black"), lty=c(1,1, 2))
+
+```
+
 
 ### Example where the dimension of $\alpha$ is greater than 1
 
@@ -389,12 +458,12 @@ print(head(eig$values))
 ## verify
 d <- X %*% g
 
-print(summary(cor(m, d)))
-print(summary(cor(m, e)))
+## print(summary(cor(m, d)))
+## print(summary(cor(m, e)))
 
 ## reducer is highly correlated with propensity score
-print(cor(e, d))
-print(cor(m, d))
+## print(cor(e, d))
+## print(cor(m, d))
 
 print(cor(lm(e ~ m-1)$fitted.values, e))
 print(cor(lm(e ~ m-1)$fitted.values, d))
