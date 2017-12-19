@@ -1,0 +1,25 @@
+---
+title: "ReducerEstimation"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Notebook for exploring reduction 
+
+This notebook will explore _estimation_ in for reducer models.  For the setup and population see "ReducerNotes.Rmd".  
+
+# SNoTE
+Consider both linear mean and propensity models. Assume that $r(X)$ is also linear in $X$.
+$$
+\begin{align}
+m_0(X) &= \mathbf{\alpha}'X \quad \text{(Expectation of control outcome)}\\
+e(X) &= \mathbf{\beta}'X \quad \text{(Propensity score)}\\
+d(X) &= \gamma'X \quad \text{(Deconfounding score)}
+\end{align}
+$$
+
+where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
+
