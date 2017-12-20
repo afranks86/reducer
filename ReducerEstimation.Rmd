@@ -23,3 +23,75 @@ $$
 
 where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
 
+```{r}
+
+bias_vec <- c()
+
+for( i in 1:100) {
+
+p <- 12
+n <- 100
+
+alpha <- 10*c(1, -1, 0, rep(0, p-3))/sqrt(2)
+beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+
+library(mvtnorm)
+library(rstiefel)
+
+X <- rmvnorm(n, rep(0, p), diag(.05, p))
+m <- X %*% alpha
+e <- X %*% beta 
+
+## temporary hack
+e[e >= 1/2] <- 0.49
+e[e < -1/2] <- -0.49
+e <- jitter(e)
+
+T <- rbinom(n, 1, e + 1/2)
+Y0 <- rnorm(n, m, 1)
+
+
+beta_hat <- coef(lm((T - 1/2) ~ X - 1))
+alpha_hat <- coef(lm(Y0[T==0] ~ X[T==0, ] - 1))
+
+cor(beta, beta_hat)
+cor(alpha, alpha_hat)
+
+alpha_hat_norm <- sqrt(sum(alpha_hat^2))
+beta_hat_norm <- sqrt(sum(beta_hat^2))
+alpha_hat <- alpha_hat / alpha_hat_norm
+beta_hat <- beta_hat / beta_hat_norm
+
+# null space of alpha
+A <- diag(p) - alpha_hat %*% t(alpha_hat)
+# null space of beta
+B <- diag(p) - beta_hat %*% t(beta_hat)
+
+AnotB  <- eigen(A %*% (diag(p) - B))$vectors[, 1]
+BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
+
+
+z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% rustiefel(2, 1)
+w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
+  
+u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
+M <- u %*% t(u)
+
+alpha_hat %*% M %*% beta_hat
+
+## gamma is now the eigenvector of I - M (step 4)
+eig <- eigen(diag(p) - M)
+
+g <- eig$vectors[, 1]
+
+## step 5
+d <- Re(X %*% g)
+
+mr <- lm(m ~ d-1)$residuals
+er <- lm(e ~ d-1)$residuals
+
+bias_vec[i] <- mean(cov(mr, er) / (1 - e))
+}
+mean(bias_vec)
+```
+
