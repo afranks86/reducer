@@ -366,13 +366,13 @@ AnotB  <- eigen(A %*% (diag(p) - B))$vectors[, 1]
 BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
 
 n <- 100
-ip <- cor_m <- cor_e <- numeric(n)
-for(i in 1:n) {
+cor_m <- cor_e <- numeric(n)
+i <- 1
+for(theta in seq(0, pi/2, length.out=n)) {
 
-  z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% rustiefel(2, 1)
+  z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% c(cos(theta), sin(theta))
   w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
-  ip[i] <- t(z) %*% AnotB
-  
+
   u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
   M <- u %*% t(u)
 
@@ -386,13 +386,12 @@ for(i in 1:n) {
 
   cor_m[i] <- cor(m, d)
   cor_e[i] <- cor(e, d)
-
+  i <- i+1
 }
 
-ord <- order(abs(ip))
-plot(acos(abs(ip[ord])), abs(cor_m[ord]), pch=19, col="red", 
+plot(seq(0, pi/2, length.out=n), abs(cor_m), pch=19, col="red", 
      type="l", lwd=3, ylim=c(0, 1), ylab="Correlation with d(X)", xlab="Alpha angle")
-lines(acos(abs(ip[ord])), abs(cor_e[ord]), pch=19, col="blue", lwd=3)
+lines(seq(0, pi/2, length.out=n), abs(cor_e), pch=19, col="blue", lwd=3)
 abline(h=cor(e, m), lty=2)
 legend("bottomleft", legend=c("m(X)", "e(X)", "Cor(m,e)"), col=c("red", "blue", "black"), lty=c(1,1, 2))
 
