@@ -30,7 +30,7 @@ bias_for_n <- c()
 bias_for_n_a <- c()
 bias_for_n_b <- c()
 for(j in 1:20) {
-  n <-  50 + (j-1)*10
+  n <-  50 + (j-1)*100
   bias_vec_a <- bias_vec_b <- bias_vec_split <- c()
 
     ## compute bias as average of 100 simulations
@@ -70,9 +70,9 @@ for(j in 1:20) {
     beta_hat_normalized <- beta_hat / beta_hat_norm
     
     # null space of alpha
-    A <- diag(p) - alpha_hat %*% t(alpha_hat)
+    A <- diag(p) - alpha_hat_normalized %*% t(alpha_hat_normalized)
     # null space of beta
-    B <- diag(p) - beta_hat %*% t(beta_hat)
+    B <- diag(p) - beta_hat_normalized %*% t(beta_hat_normalized)
     
     AnotB  <- eigen(A %*% (diag(p) - B))$vectors[, 1]
     BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
