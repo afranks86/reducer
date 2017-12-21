@@ -30,8 +30,8 @@ bias_for_n <- c()
 bias_for_n_a <- c()
 bias_for_n_b <- c()
 for(j in 1:20) {
-  n <-  50 + (j-1)*100
-  bias_vec_a <- bias_vec_b <- bias_vec_split <- c()
+  n <-  50 + (j-1)*10
+  bias_vec_a <- bias_vec_b <- bias_vec <- c()
 
     ## compute bias as average of 100 simulations
     for( i in 1:100) {
@@ -78,7 +78,7 @@ for(j in 1:20) {
     BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
     
     
-    z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% rustiefel(2, 1)
+    z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% c(cos(pi/4), sin(pi/4))
     w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
     
     u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
@@ -101,8 +101,8 @@ for(j in 1:20) {
     
     bias_vec[i] <- mean(cov(mr, er) / (1 - e))
     
-    mr <- lm(m ~ d_a-1)$residuals
-    er <- lm(e ~ d_a-1)$residuals
+    mr <- lm(m ~ d_a -1)$residuals
+    er <- lm(e ~ d_a -1)$residuals
     
     bias_vec_a[i] <- mean(cov(mr, er) / (1 - e))
     
@@ -123,6 +123,7 @@ ymax <- 1.1 * unconditional_bias
 plot(40 + (1:20)*10, bias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", ylim=c(0, ymax)) 
 lines(40 + (1:20)*10, bias_for_n_b, type="l", lwd=2, xlab="sample size", ylab="bias", col="blue")
 lines(40 + (1:20)*10, bias_for_n_a, type="l", lwd=2, xlab="sample size", ylab="bias", col="red") 
+legend("topright", legend=c("pi/4", "pi/2 (d=e)", "0 (d=m)"), col=c("black", "blue", "red"), lty=1, lwd=2, title="Alpha angle")
 
 abline(h=unconditional_bias, lty=2)
 
