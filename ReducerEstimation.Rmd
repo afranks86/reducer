@@ -46,18 +46,21 @@ for(j in 1:20) {
     
     X <- rmvnorm(n, rep(0, p), diag(.05, p))
     m <- X %*% alpha
-    e <- X %*% beta 
+    xb <- X %*% beta 
+    escale <- 10
+    e <- exp(escale*xb)/(1 + exp(escale*xb))
     
     ## temporary hack
-    e[e >= 1/2] <- 0.49
-    e[e < -1/2] <- -0.49
-    e <- jitter(e)
-    
-    T <- rbinom(n, 1, e + 1/2)
-    Y0 <- rnorm(n, m, 1)
+    ##e[e >= 1/2] <- 0.49
+    ##e[e < -1/2] <- -0.49
+    ## e <- jitter(e)
+
+    T <- rbinom(n, 1, e)
+    Y0 <- rnorm(n, m, 5)
     
     ## estimates of m and e
-    beta_hat <- coef(lm((T - 1/2) ~ X - 1))
+    ## beta_hat <- coef(lm((T - 1/2) ~ X - 1))
+    beta_hat <- coef(glm(T ~ X - 1))
     alpha_hat <- coef(lm(Y0[T==0] ~ X[T==0, ] - 1))
     
     cor(beta, beta_hat)
@@ -96,20 +99,32 @@ for(j in 1:20) {
     d_a <- X %*% alpha_hat
     d_b <- X %*% beta_hat
     
+    ## check uncorrelated condition holds
+    res1 <- lm(d_a ~ d-1)$residuals
+    res2 <- lm(d_b ~ d-1)$residuals
+    print(cor(res1, res2))
+
     mr <- lm(m ~ d-1)$residuals
-    er <- lm(e ~ d-1)$residuals
+    lm_ed <- lm(e ~ d-1)
+    er <- lm_ed$residuals
+    efit <- lm_ed$fitted
     
-    bias_vec[i] <- mean(cov(mr, er) / (1 - e))
+    bias_vec[i] <- mean(cov(mr, er) / (1 - efit))
     
     mr <- lm(m ~ d_a -1)$residuals
-    er <- lm(e ~ d_a -1)$residuals
+    lm_ed_a <- lm(e ~ d_a-1)
+    er <- lm_ed_a$residuals
+    efit <- lm_ed_a$fitted
     
-    bias_vec_a[i] <- mean(cov(mr, er) / (1 - e))
+    bias_vec_a[i] <- mean(cov(mr, er) / (1 - efit))
     
     mr <- lm(m ~ d_b-1)$residuals
-    er <- lm(e ~ d_b-1)$residuals
+
+    lm_ed_b <- lm(e ~ d_b-1)
+    er <- lm_ed_b$residuals
+    efit <- lm_ed_b$fitted
     
-    bias_vec_b[i] <- mean(cov(mr, er) / (1 - e))
+    bias_vec_b[i] <- mean(cov(mr, er) / (1 - efit))
     
   }
   bias_for_n[j] <- mean(bias_vec)  
@@ -119,7 +134,7 @@ for(j in 1:20) {
 
 unconditional_bias <- mean(as.numeric(cov(m, e))/(1-e))
 print(unconditional_bias)
-ymax <- 1.1 * unconditional_bias
+ymax = 1.1*max(c(bias_for_n, bias_for_n_b, bias_for_n_a))
 plot(40 + (1:20)*10, bias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", ylim=c(0, ymax)) 
 lines(40 + (1:20)*10, bias_for_n_b, type="l", lwd=2, xlab="sample size", ylab="bias", col="blue")
 lines(40 + (1:20)*10, bias_for_n_a, type="l", lwd=2, xlab="sample size", ylab="bias", col="red") 
