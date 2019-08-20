@@ -30,10 +30,15 @@ logistic <- function(x) 1 / (1 + exp(-x))
 bias_for_n <- c()
 bias_for_n_a <- c()
 bias_for_n_b <- c()
+
 ubias_for_n <- c()
 form_for_n <- c()
-for(j in 1:20) {
-  n <-  50 + (j-1)*100
+
+nvec <- seq(40, 100, by=10)
+j <- 0
+for(n in nvec) {
+  j <- j + 1
+
   bias_vec_a <- bias_vec_b <- bias_vec <- c()
   raw_diff <- bias_form <- c()
 
@@ -48,12 +53,18 @@ for(j in 1:20) {
     library(mvtnorm)
     library(rstiefel)
     
-    #X <- rmvnorm(n, rep(0, p), diag(.5, p))
-    X <- matrix(2 * runif(p*n) - 1, nc=p)
+    X <- rmvnorm(n, rep(0, p), diag(1, p))
+    ## X <- matrix(2 * runif(p*n) - 1, nc=p)
     mscale <- 5
+
     m <- mscale * X %*% alpha
     xb <- X %*% beta 
     escale <- log(10)
+
+    m <- X %*% alpha
+    xb <- X %*% beta 
+    escale <- 2
+
     e <- exp(escale*xb)/(1 + exp(escale*xb))
     
     ## temporary hack
@@ -62,7 +73,7 @@ for(j in 1:20) {
     ## e <- jitter(e)
 
     T <- rbinom(n, 1, e)
-    Y0 <- rnorm(n, m, 5)
+    Y0 <- rnorm(n, m, 10)
     
     ## estimates of m and e
     ## beta_hat <- coef(lm((T - 1/2) ~ X - 1))
@@ -87,7 +98,7 @@ for(j in 1:20) {
     BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
     
     
-    z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% c(cos(pi/4), sin(pi/4))
+    z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% c(cos(7*pi/16), sin(7*pi/16))
     w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
     
     u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
@@ -102,13 +113,18 @@ for(j in 1:20) {
     
     ## step 5
     d <- Re(X %*% g)
-    d_a <- X %*% alpha_hat
-    d_b <- X %*% beta_hat
+    d_a <- X %*% alpha_hat_normalized
+    d_b <- X %*% beta_hat_normalized
     
     ## check uncorrelated condition holds
     res1 <- lm(d_a ~ d-1)$residuals
     res2 <- lm(d_b ~ d-1)$residuals
+
     cor(res1, res2)
+
+    # if(cor(res1, res2) > 0.2)
+    #   browser()
+    ## print(cor(res1, res2))
 
     lm_md <- lm(m ~ d-1)
     mr <- lm_md$residuals
@@ -148,6 +164,7 @@ for(j in 1:20) {
 ```{r}
 unconditional_bias <- mean(as.numeric(cov(Y0, T))/(1-mean(e)))
 print(unconditional_bias)
+
 ymax = 1.1*max(c(bias_for_n, bias_for_n_b, bias_for_n_a, form_for_n))
 plot(40 + (1:20)*100, bias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", ylim=c(0, ymax)) 
 lines(40 + (1:20)*100, bias_for_n_b, type="l", lwd=2, xlab="sample size", ylab="bias", col="blue")
