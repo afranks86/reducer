@@ -274,25 +274,27 @@ for $w_i = \gamma'u_i$ and $\lambda_2$ is the absolute value of the negative eig
 - By change of basis (and because $\alpha$ and $\beta$ are in the span of $u_1$ and $u_2$) we have $\alpha = (\alpha'u_1)u_1 + (\alpha'u_2)u_2$ and $\beta = (\beta'u_1)u_1 + (\beta'u_2)u_2$
 - In addition $\alpha'u_1 = \beta' u_1$ and $\alpha'u_2 = -\beta' u_2$.  This characterizes the points on the hyperbola when $\gamma = \alpha$ or $\gamma = \beta$.
 
+Below we plot the projection of the solution vectors onto the space spanned by $u_1, u_2$.  The black bold line represents valid solutions.  
+
 ```{r, echo=FALSE, fig.align="center"}
 p <- 12
 
 ab_list <- list()
 
 
-alpha <- c(1, -3, 0, rep(0, p-3))
-beta <- c(1, 0, .3, rep(0, p-3))
+alpha <- c(1, -10, 0, rep(0, p-3))
+beta <- c(10, 0, 1, rep(0, p-3))
 alpha <- alpha/sqrt(sum(alpha^2))
 beta <- beta/sqrt(sum(beta^2))
 
-ab_list[[1]] <- list(alpha=alpha, beta=beta)
+ab_list[[2]] <- list(alpha=alpha, beta=beta)
 
 alpha <- c(1, 0.4, 0, rep(0, p-3))
 beta <- c(0.1, 4, 0, rep(0, p-3))
 alpha <- alpha/sqrt(sum(alpha^2))
 beta <- beta/sqrt(sum(beta^2))
 
-ab_list[[2]] <- list(alpha=alpha, beta=beta)
+ab_list[[1]] <- list(alpha=alpha, beta=beta)
 
 alpha <- c(1, 0, rep(0, p-2))
 beta <- c(0, 1, rep(0, p-2))
@@ -324,23 +326,29 @@ for(i  in 1:3) {
   xlim <- 1.1 * max(abs(t(cbind(alpha, beta)) %*%  mvecs[, 1]))
   ylim <- 1.1 * max(abs(t(cbind(alpha, beta)) %*%  mvecs[, 2]))
   conicPlot(c(mvals[1], 0, mvals[2], 0, 0, -const),
+            ylim=c(-1, 1), xlim=c(-2, 2),
             xlab=expression(w[1]), ylab=expression(w[2]),
-            main = sprintf("alpha'beta  = %.3f", t(alpha) %*% beta))
-  points(t(cbind(alpha, beta)) %*%  mvecs[, 1],
-         t(cbind(alpha, beta)) %*% mvecs[, 2], col="red", pch=19)
+            main = sprintf("alpha'beta  = %.3f\n", t(alpha) %*% beta))
+  
+  w2_lim <- (t(alpha) %*% mvecs)[2]
+  w2_vec <- seq(-w2_lim, w2_lim, length.out=100)
+  lines(sqrt((c(t(alpha) %*% beta) - mvals[2] * w2_vec^2)/mvals[1]), w2_vec, lwd=3)
+  
+    points(t(cbind(alpha, beta)) %*%  mvecs[, 1],
+         t(cbind(alpha, beta)) %*% mvecs[, 2], col="red", pch=19,cex=1.5)
   abline(h=0, lty=2)
   abline(v=0, lty=2)
   
   text(t(cbind(alpha, beta)) %*%  mvecs[, 1],
        t(cbind(alpha, beta)) %*% mvecs[, 2],
-       labels=c("alpha", "beta"), pos=2, offset=1, col="red", pch=19)
+       labels=c("alpha", "beta"), pos=2, offset=1, col="red", pch=19, cex=1.5)
   
   tst_vec <- sqrt(as.numeric(const / mvals[1])) * mvecs[, 1, drop=FALSE] +
     sqrt(as.numeric(1 - const/mvals[1])) * NullC(mvecs) %*% rustiefel(p-2, 1)
-  points(t(tst_vec) %*%  mvecs[, 1], 0, pch=19, col="blue")
+  points(t(tst_vec) %*%  mvecs[, 1], 0, pch=19, col="blue", cex=1.5)
   text(t(tst_vec) %*%  mvecs[, 1], -.1,
-       pos=2, offset=1, label=sprintf("equiangular\n IP = %.3f", t(tst_vec) %*% alpha),
-       pch=19, col="blue")
+       pos=4, offset=2, label=sprintf("equiangular\n IP = %.3f", t(tst_vec) %*% alpha),
+       pch=19, col="blue", srt=90)
 }
 ```
 
@@ -348,7 +356,7 @@ for(i  in 1:3) {
 
 
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, fig.align='center'}
 p <- 12
 
 alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
