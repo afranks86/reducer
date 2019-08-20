@@ -1,0 +1,270 @@
+---
+title: "ReducerEstimationAngle"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Notebook for exploring reduction 
+
+This notebook will explore _estimation_ in for reducer models.  For the setup and population see "ReducerNotes.Rmd".  
+
+# SNoTE
+Consider both linear mean and propensity models. Assume that $r(X)$ is also linear in $X$.
+$$
+\begin{align}
+m_0(X) &= \mathbf{\alpha}'X \quad \text{(Expectation of control outcome)}\\
+e(X) &= \mathbf{\beta}'X \quad \text{(Propensity score)}\\
+d(X) &= \gamma'X \quad \text{(Deconfounding score)}
+\end{align}
+$$
+
+where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
+
+```{r}
+logistic <- function(x){
+  1 / (1 + exp(-x))
+}
+
+logit <- function(p){
+  log(p / (1-p))
+}
+
+gen_linear_data <- function(n, p, alpha, beta, angles, Bside=FALSE){
+  require(mvtnorm)
+  require(magrittr)
+  X <- rmvnorm(n, rep(0, p), diag(1, p))
+  m <- X %*% alpha
+  xb <- X %*% beta 
+  escale <- log(5)
+  e <- logistic(escale * xb)
+  
+  ## temporary hack
+  #e[e >= 1/2] <- 0.49
+  #e[e < -1/2] <- -0.49
+  #e <- jitter(e)
+  
+  T <- rbinom(n, 1, e)
+  Y0 <- rnorm(n, m, 1)
+  
+  ## estimates of m and e
+  #beta_hat <- coef(lm((T - 1/2) ~ X - 1))
+  beta_hat <- coef(glm(T ~ X - 1))
+  alpha_hat <- coef(lm(Y0[T==0] ~ X[T==0, ] - 1))
+  
+  ## normalize to get d(X) surface
+  alpha_hat_norm <- sqrt(sum(alpha_hat^2))
+  beta_hat_norm <- sqrt(sum(beta_hat^2))
+  alpha_hat_normalized <- alpha_hat / alpha_hat_norm
+  beta_hat_normalized <- beta_hat / beta_hat_norm
+  
+  # null space of alpha_hat
+  A <- diag(p) - alpha_hat_normalized %*% t(alpha_hat_normalized)
+  # null space of beta_hat
+  B <- diag(p) - beta_hat_normalized %*% t(beta_hat_normalized)
+  
+  AnotB  <- eigen(A %*% (diag(p) - B))$vectors[, 1]
+  BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
+  
+  gen_g <- function(angle, svec, Bside){
+    if(Bside){
+      z <- cbind(BnotA, eigen(A %*% (diag(p) - BnotA %*% t(BnotA)))$vectors[, svec]) %*%
+        c(cos(angle), sin(angle))
+      
+      w <- eigen(A %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
+    } else {
+      z <- cbind(AnotB, eigen(B %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, svec]) %*%
+        c(cos(angle), sin(angle))
+      
+      w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
+    }
+      
+    u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
+    
+    M <- u %*% t(u)
+    
+  
+    ## gamma is now the eigenvector of I - M (step 4)
+    eig <- eigen(diag(p) - M)
+    
+    eig$vectors[, 1]
+  }
+ 
+  ## Initialize all the things 
+  angle_dbias_vec <-
+    angle_mbias_vec <-
+    angle_ebias_vec <- rep(NA, length(angles))
+  angle_cor_vecm <-
+    angle_cor_vecm1 <-
+    angle_cor_vecm2 <- rep(NA, length(angles))
+  angle_cor_vece <- rep(NA, length(angles))
+  angle_cor_vecg <- 
+    angle_cor_vecg1 <- 
+    angle_cor_vecg2 <- rep(NA, length(angles))
+  angle_cor_me <- rep(NA, length(angles))
+  e_min <- rep(NA, length(angles))
+  e_max <- rep(NA, length(angles))
+  eh_min <- rep(NA, length(angles))
+  eh_max <- rep(NA, length(angles))
+  eh_emin <- 
+    eh_emax <- rep(NA, length(angles))
+  ed_min <- rep(NA, length(angles))
+  ed_max <- rep(NA, length(angles))
+  
+  for(i in 1:length(angles)){
+    angle <- angles[i]
+    
+    g <- gen_g(angle, 1, Bside)
+    g1 <- gen_g(angle, 2, Bside)
+    g2 <- gen_g(angle, p-2, Bside)
+  
+    ## step 5
+    d_hat <- Re(X %*% g)
+    d_hat1 <- Re(X %*% g1)
+    d_hat2 <- Re(X %*% g2)
+    d_a <- X %*% alpha_hat
+    d_b <- X %*% beta_hat
+    
+    fit_stats <- function(ss){
+      mr <- lm(m ~ ss - 1)$residuals
+      efit <- lm(logit(e) ~ ss - 1)
+      ef <- logistic(efit$fitted.values)
+      er <- e - ef
+      list(mr=mr,
+           er=er,
+           ef=ef)
+    }
+    
+    fit_bias <- function(red_stats){
+      with(red_stats,
+           mean(as.vector(cov(mr, er)) / (1 - ef)))
+    }
+   
+    dstats <- fit_stats(d_hat)
+    mstats <- fit_stats(d_a)
+    estats <- fit_stats(d_b)
+    
+    angle_dbias_vec[i] <- fit_bias(dstats)
+    angle_mbias_vec[i] <- fit_bias(mstats)
+    angle_ebias_vec[i] <- fit_bias(estats)
+    angle_cor_vecm[i] <- cor(d_hat, d_a) %>% abs
+    angle_cor_vecm1[i] <- cor(d_hat1, d_a) %>% abs
+    angle_cor_vecm2[i] <- cor(d_hat2, d_a) %>% abs
+    angle_cor_vece[i] <- cor(d_hat, d_b) %>% abs
+    angle_cor_me[i] <- cor(d_a, d_b) %>% abs
+    e_min[i] <- min(e)
+    e_max[i] <- max(e)
+    ed_min[i] <- min(dstats$ef)
+    ed_max[i] <- max(dstats$ef)
+    eh_min[i] <- min(logistic(d_b))
+    eh_max[i] <- max(logistic(d_b))
+    eh_emin[i] <- min(estats$ef)
+    eh_emax[i] <- max(estats$ef)
+    unconditional_bias <- mean(as.numeric(cov(m, e))/(1-mean(e)))
+  }
+  
+  list(angles=angles,
+       abvd=angle_dbias_vec,
+       abvm=angle_mbias_vec,
+       abve=angle_ebias_vec,
+       acvm=angle_cor_vecm,
+       acvm1=angle_cor_vecm1,
+       acvm2=angle_cor_vecm2,
+       acvme = angle_cor_me,
+       acve=angle_cor_vece,
+       e_min=e_min,
+       e_max=e_max,
+       ed_min=ed_min,
+       ed_max=ed_max,
+       eh_min=eh_min,
+       eh_max=eh_max,
+       eh_emin=eh_emin,
+       eh_emax=eh_emax,
+       ub = unconditional_bias)
+}
+``` 
+
+```{r}
+p <- 25
+alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+
+#create cluster
+library(parallel)
+
+
+par_gen_linear_data <- function(nsims, arglist){
+  arglist <- lapply(arglist, eval)
+  cl <- makeCluster(detectCores()-1)  
+  clusterExport(cl,c("gen_linear_data", "arglist", "logistic", "logit"))
+  res <- parSapply(cl, 1:nsims,function(i){
+    do.call(gen_linear_data, arglist) })
+  stopCluster(cl)
+  res
+}
+
+library(matrixStats)
+n <- 1e4
+#glA <- replicate(500, gen_linear_data(1000, p, alpha, beta, seq(0, pi/2, by=pi/48)))
+glA <- par_gen_linear_data(500, list(n, p, alpha, beta, seq(0, pi/2, by=pi/48)))
+glB <- par_gen_linear_data(500, list(n, p, alpha, beta, seq(0, pi/2, by=pi/48), Bside=TRUE))
+```
+
+```{r}
+summarize_sims <- function(gl){
+  gg <- lapply(rownames(gl), function(nn) do.call(cbind, gl[nn,]) %>% rowMeans)
+  names(gg) <- rownames(gl)
+  gg
+}
+
+ggA <- summarize_sims(glA)
+ggB <- summarize_sims(glB)
+
+plot_radians <- function(...){
+  plot(..., xaxt='n')
+  axis(1, at = seq(0, 2*pi, by=pi/4),
+     c("0",expression(pi/4),expression(pi/2),expression(3*pi/4),
+       expression(pi), expression(5*pi/4),expression(3*pi/2),expression(7*pi/4),
+       "0"))
+}
+```
+```{r}
+plot_gg <- function(gg){
+  plot_radians(gg$angles, gg$acvm, type='l', col='blue', ylim=c(0,1),
+               main="Correlation with m and e")
+  lines(gg$angles, gg$acvm1, col='red')
+  lines(gg$angles, gg$acvm2, col='green')
+  lines(gg$angles, gg$acve, type='l')
+  lines(gg$angles, gg$acvme)
+}
+
+plot_biases <- function(gg){
+  plot_radians(gg$angles, gg$abvd, type='l',
+               ylim=c(0, max(c(gg$avbe, gg$abvm, gg$abvd, gg$ub))),
+               main="Bias")
+  lines(gg$angles, gg$abve)
+  lines(gg$angles, gg$abvm)
+  abline(h=gg$ub)
+}
+
+plot_pscores <- function(gg){
+  plot_radians(gg$angles, gg$ed_min, ylim=c(0,1), type='l',
+               main="Extreme Propensity Scores")
+  lines(gg$angles, gg$ed_max, ylim=c(0,1))
+  lines(gg$angles, gg$e_max, col='red')
+  lines(gg$angles, gg$e_min, col='red') 
+  lines(gg$angles, gg$eh_emax, col='blue')
+  lines(gg$angles, gg$eh_emin, col='blue')
+}
+
+plot_gg(ggA)
+plot_gg(ggB)
+
+plot_pscores(ggA)
+plot_pscores(ggB)
+
+plot_biases(ggA)
+plot_biases(ggB)
+```
