@@ -16,12 +16,183 @@ Consider both linear mean and propensity models. Assume that $r(X)$ is also line
 $$
 \begin{align}
 m_0(X) &= \mathbf{\alpha}'X \quad \text{(Expectation of control outcome)}\\
-e(X) &= \mathbf{\beta}'X \quad \text{(Propensity score)}\\
+e(X) &= \text{logit}^{-1}(\mathbf{\beta}'X) \quad \text{(Propensity score)}\\
 d(X) &= \gamma'X \quad \text{(Deconfounding score)}
 \end{align}
 $$
 
 where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
+
+
+
+As a starting point, assume the true propensity scores are known and only the outcome model needs to be estiamted. 
+
+```{r}
+library(balanceHD)
+library(mvtnorm)
+library(rstiefel)
+library(glmnet)
+
+
+iters <- 100
+tau_hat_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
+for(iter  in 1:iters) {
+  
+  n = 500
+  p = 1000
+  
+  alpha <- rustiefel(p, 1) 
+  beta <- rustiefel(p, 1) 
+  
+  alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+  beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+  cor(alpha, beta)
+  
+  X <- rmvnorm(n, rep(0, p), diag(1, p))
+  ## X <- matrix(2 * runif(p*n) - 1, nc=p)
+  mscale <- 15
+  
+  m <- mscale * X %*% alpha
+  xb <- X %*% beta 
+  escale <- 3
+  
+  e <- exp(escale*xb)/(1 + exp(escale*xb))
+  
+  tau = 1
+  T <- rbinom(n, 1, e)
+  Y <- m +  tau * T * ( 1 + X[, 1]^2) + rnorm(n, 0, 1)
+  
+  Y0 <- Y[T==0]
+  Y1 <- Y[T==1]
+  
+  mean(Y0)
+  mean(Y0 / (1 - e[T==0]))
+  
+  Y_lambda_min <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
+                            alpha=0, penalty.factor = c(0, rep(1, p)), intercept=FALSE)$lambda.min
+  glm_coefs <- coef(glmnet(cbind(T, X), Y, family="gaussian", 
+                           alpha=0, penalty.factor = c(0, rep(1, p)),intercept=FALSE, 
+                           lambda=Y_lambda_min))
+  
+  alpha_hat <- glm_coefs[-c(1:2)]
+  tau_hat <- glm_coefs[2]    
+  
+  alpha_hat_norm <- sqrt(sum(alpha_hat^2))
+  alpha_hat_normalized <- alpha_hat / alpha_hat_norm
+  
+  M <- (alpha_hat_normalized %*% t(beta) + beta %*% t(alpha_hat_normalized))/2
+  eig <- eigen(M)
+  mvecs <- eig$vectors[, c(1,p)]
+  mvals <- eig$values[c(1,p)]
+  if(abs(mvals[2]) > mvals[1]) {
+    mvals <- -mvals[2:1]
+    mvecs <- mvecs[, 2:1]
+  }
+  
+  const <- abs(t(alpha_hat_normalized) %*% beta)
+  # print(const)
+  
+  w2_lim <- (t(beta) %*% mvecs)[2]
+  
+  w2 <- -0.5
+  w1 <- sqrt(as.numeric((const - mvals[2] * w2^2)/mvals[1]))
+
+  g1 <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
+  
+  if(w2==0 & (abs(t(g1) %*% beta) - abs(t(g1) %*% alpha_hat_normalized) > 1e-10))
+    browser()
+  
+  d <- Re(X %*% g1)
+  d_a <- X %*% alpha_hat_normalized
+  
+  res <- glm(T ~ d, family="binomial")
+  hist(predict(res, type="response"))
+  
+  e_d <- predict(res, type="response")
+
+  g2 <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
+  res2 <- glm(T ~ (X %*% g2), family="binomial")
+  
+  e_d2 <- predict(res2, type="response")
+  
+  g3 <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
+  res3 <- glm(T ~ (X %*% g3), family="binomial")
+  e_d3 <- predict(res3, type="response")
+
+  
+  
+  plt_indices <- sample(1:length(e), 30)
+
+  par(mfrow=c(1, 3))  
+  shrinkage_plot(e[plt_indices], e_d[plt_indices])
+  shrinkage_plot(e[plt_indices], e_d2[plt_indices])
+  shrinkage_plot(e[plt_indices], ((e_d + e_d2)/2)[plt_indices])
+  
+  print(mean((e - 1/2) * (e_d - 1/2) < 0))
+  print(mean((e - 1/2) * (e_d2 - 1/2) < 0))
+  print(mean((e - 1/2) * (e_d3 - 1/2) < 0))
+  print(mean((e - 1/2) * ((e_d+e_d2+e_d3)/3 - 1/2) < 0))
+  
+  e_avg <- (e_d+e_d2+e_d3)/3
+  
+  shrinkage_plot(e[plt_indices], e_avg[plt_indices])
+  
+  par(mfrow=c(1,1))
+  
+  
+  plot(e, e_d, pch=19)
+  plot(e, e_d2, pch=19)
+  abline(h=1/2, v=1/2, lty=2)
+  
+  plot(e_d, e_d2)
+  abline(h=1/2, v=1/2, lty=2)
+  print(mean(sign(e - 1/2) * (e_d - 1/2)))
+  print(mean(sign(e_d - 1/2) * (e_d2 - 1/2)))
+
+  residual <- Y - X %*% alpha_hat - T * tau_hat
+  
+  mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(T / e * residual) / sum(T / e)
+  mu_ctrl <- mean(X %*% alpha_hat) + sum((1-T) / (1-e) * residual) / sum((1-T) / e)
+  
+  ate_hat <- mu_treat - mu_ctrl
+  ate_hat
+  
+  bias <- get_bias(T, residual, alpha_hat_normalized, beta, tau_hat, w2=-0.58, times=100)
+  
+  mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
+  mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
+  ate_hat_d <- mu_treat - mu_ctrl
+  ate_hat_d
+  
+  print(paste(tau_hat, ate_hat, ate_hat_d, sep=", "))
+  
+  tau_hat_vec[iter] <- tau_hat
+  aipw_vec[iter] <- ate_hat
+  aipw_d_vec[iter] <- ate_hat_d
+  
+  
+} 
+
+
+mean((tau_hat_vec)^2)
+mean((aipw_vec)^2)
+mean((aipw_d_vec)^2)
+
+true_ate <- mean(tau * ( 1 + X[, 1]))
+apply((rbind(tau_hat_vec, aipw_vec, aipw_d_vec) - true_ate)^2, 1, mean)
+apply(abs(rbind(tau_hat_vec, aipw_vec, aipw_d_vec) - true_ate), 1, median)
+# 
+# 
+# tau.hat = residualBalance.ate(X, Y, W, estimate.se = TRUE)
+# print(paste("true tau:", tau))
+# print(paste("point estimate:", round(tau.hat[1], 2)))
+# print(paste0("95% CI for tau: (", round(tau.hat[1] - 1.96 * tau.hat[2], 2), ", ", round(tau.hat[1] + 1.96 * tau.hat[2], 2), ")"))
+
+
+```
+
+
+
 
 ```{r}
 logistic <- function(x) 1 / (1 + exp(-x))
@@ -34,36 +205,36 @@ bias_for_n_b <- c()
 ubias_for_n <- c()
 form_for_n <- c()
 
-nvec <- seq(40, 100, by=10)
+nvec <- round(seq(100, 500, length.out=10))
 j <- 0
 for(n in nvec) {
-  j <- j + 1
 
+  j <- j + 1
+  
   bias_vec_a <- bias_vec_b <- bias_vec <- c()
   raw_diff <- bias_form <- c()
-
-    ## compute bias as average of 100 simulations
-    for(i in 1:100) {
+  print(n)
+  ## compute bias as average of 100 simulations
+  for(i in 1:100) {
     
-    p <- 12
-    
-    alpha <- 4*c(1, -1, 0, rep(0, p-3))/sqrt(2)
-    beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+    p <- 50
     
     library(mvtnorm)
     library(rstiefel)
+    library(glmnet)
+    
+    alpha <- rustiefel(p, 1) ## 4*c(1, -1, 0, rep(0, p-3))/sqrt(2)
+    beta <- rustiefel(p, 1) ## c(1, 0, 1, rep(0, p-3))/sqrt(2)
     
     X <- rmvnorm(n, rep(0, p), diag(1, p))
     ## X <- matrix(2 * runif(p*n) - 1, nc=p)
-    mscale <- 5
 
+    mscale <- 5
     m <- mscale * X %*% alpha
+    
     xb <- X %*% beta 
     escale <- log(10)
 
-    m <- X %*% alpha
-    xb <- X %*% beta 
-    escale <- 2
 
     e <- exp(escale*xb)/(1 + exp(escale*xb))
     
@@ -71,14 +242,21 @@ for(n in nvec) {
     ##e[e >= 1/2] <- 0.49
     ##e[e < -1/2] <- -0.49
     ## e <- jitter(e)
-
+    
     T <- rbinom(n, 1, e)
-    Y0 <- rnorm(n, m, 10)
+    Y0 <- rnorm(n, m, 1)
     
     ## estimates of m and e
     ## beta_hat <- coef(lm((T - 1/2) ~ X - 1))
-    beta_hat <- coef(glm(T ~ X - 1))
-    alpha_hat <- coef(lm(Y0[T==0] ~ X[T==0, ] - 1))
+    
+    
+    beta_hat <- coef(glmnet(X, T, family="binomial"))
+    
+    T_lambda_min <- cv.glmnet(X, T, family="binomial", alpha=0, intercept=FALSE)$lambda.min
+    beta_hat <- coef(glmnet(X, T, family="binomial", lambda=T_lambda_min, alpha=0, intercept=FALSE))[-1]
+    
+    # Y_lambda_min <- cv.glmnet(X[T==0, ], Y0[T==0], family="gaussian", alpha=0, intercept=FALSE)$lambda.min
+    # alpha_hat <- coef(glmnet(X[T==0, ], Y0[T==0], family="gaussian", alpha=0, intercept=FALSE, lambda=Y_lambda_min))[-1]
     
     cor(beta, beta_hat)
     cor(alpha, alpha_hat)
@@ -89,29 +267,17 @@ for(n in nvec) {
     alpha_hat_normalized <- alpha_hat / alpha_hat_norm
     beta_hat_normalized <- beta_hat / beta_hat_norm
     
-    # null space of alpha
-    A <- diag(p) - alpha_hat_normalized %*% t(alpha_hat_normalized)
-    # null space of beta
-    B <- diag(p) - beta_hat_normalized %*% t(beta_hat_normalized)
+    M <- (alpha %*% t(beta) + beta %*% t(alpha))/2
+    eig <- eigen(M)
+    mvecs <- eig$vectors[, c(1,p)]
+    mvals <- eig$values[c(1,p)]
+    const <- t(alpha) %*% beta
+  
+    w2 <- 0    
+    w1 <- sqrt(as.numeric((t(alpha) %*% beta - mvals[2] * w2^2)/mvals[1]))
     
-    AnotB  <- eigen(A %*% (diag(p) - B))$vectors[, 1]
-    BnotA  <- eigen(B %*% (diag(p) - A))$vectors[, 1]
-    
-    
-    z <- cbind(AnotB, eigen(A %*% (diag(p) - AnotB %*% t(AnotB)))$vectors[, 1]) %*% c(cos(7*pi/16), sin(7*pi/16))
-    w <- eigen(B %*% (diag(p) - z %*% t(z)))$vectors[, 1:(p-2)]
-    
-    u <- eigen(z %*% t(z) + w %*% t(w))$vectors[, 1:(p-1)]
-    M <- u %*% t(u)
-    
-    alpha_hat %*% M %*% beta_hat
-    
-    ## gamma is now the eigenvector of I - M (step 4)
-    eig <- eigen(diag(p) - M)
-    
-    g <- eig$vectors[, 1]
-    
-    ## step 5
+    g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
+
     d <- Re(X %*% g)
     d_a <- X %*% alpha_hat_normalized
     d_b <- X %*% beta_hat_normalized
@@ -119,13 +285,9 @@ for(n in nvec) {
     ## check uncorrelated condition holds
     res1 <- lm(d_a ~ d-1)$residuals
     res2 <- lm(d_b ~ d-1)$residuals
-
-    cor(res1, res2)
-
-    # if(cor(res1, res2) > 0.2)
-    #   browser()
-    ## print(cor(res1, res2))
-
+    
+    print(sprintf("Residual correlation is %.3f", cor(res1, res2)))
+    
     lm_md <- lm(m ~ d-1)
     mr <- lm_md$residuals
     mfit <- lm_md$fitted
@@ -135,8 +297,13 @@ for(n in nvec) {
     efit <- lm_ed$fitted
     bias_vec[i] <- mean(cov(mr, er) / (1 - efit))
     
+    if(j==1 & i==1) {    
+      par(mfrow=c(1,2)) 
+      hist(e, col="red")
+      hist(efit, col="red")
+    }
+    
     mr_a <- lm(m ~ d_a -1)$residuals
-    #lm_ed_a <- lm(e ~ d_a-1)
     lm_ed_a <- loess(e ~ d_a-1)
     er_a <- lm_ed_a$residuals
     efit_a <- lm_ed_a$fitted
@@ -162,15 +329,18 @@ for(n in nvec) {
 ```
 
 ```{r}
+
 unconditional_bias <- mean(as.numeric(cov(Y0, T))/(1-mean(e)))
 print(unconditional_bias)
 
-ymax = 1.1*max(c(bias_for_n, bias_for_n_b, bias_for_n_a, form_for_n))
-plot(40 + (1:20)*100, bias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", ylim=c(0, ymax)) 
-lines(40 + (1:20)*100, bias_for_n_b, type="l", lwd=2, xlab="sample size", ylab="bias", col="blue")
-lines(40 + (1:20)*100, bias_for_n_a, type="l", lwd=2, xlab="sample size", ylab="bias", col="red") 
-lines(40 + (1:20)*100, form_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", lty=2)
-lines(40 + (1:20)*100, ubias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", lty=3)
+ymax = 1.1*max(abs(c(bias_for_n, bias_for_n_b, bias_for_n_a, form_for_n)))
+# plot(nvec, bias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", ylim=c(-ymax, ymax), col="orange") 
+plot(nvec, bias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", ylim=c(-.1, .1), col="orange") 
+abline(h=0, lty=2)
+lines(nvec, bias_for_n_b, type="l", lwd=2, xlab="sample size", ylab="bias", col="blue")
+lines(nvec, bias_for_n_a, type="l", lwd=2, xlab="sample size", ylab="bias", col="red") 
+lines(nvec, form_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", lty=2)
+lines(nvec, ubias_for_n, type="l", lwd=2, xlab="sample size", ylab="bias", lty=3)
 
 legend("topright", legend=c("pi/4", "pi/2 (d=e)", "0 (d=m)"), col=c("black", "blue", "red"), lty=1, lwd=2, title="Alpha angle")
 
@@ -180,7 +350,7 @@ mean(Y0[T==1])
 mean(Y0[T==0])
 ```
 
-```{r}
+```{r, eval=FALSE}
 ## Under development. Not run.
 
 normalize <- function(x){
