@@ -51,10 +51,9 @@ for(iter  in 1:iters) {
   
   m <- mscale * X %*% alpha
   xb <- X %*% beta 
-  escale <- 1/2
+  escale <- 1
   
   e <- exp(escale*xb)/(1 + exp(escale*xb))
-  hist(e)
 
   tau = 5
   T <- rbinom(n, 1, e)
@@ -113,11 +112,8 @@ for(iter  in 1:iters) {
   
   res <- glm(T ~ d, family="binomial")
   e_d <- predict(res, type="response")
-
-
   
   residual <- Y - X %*% alpha_hat - T * tau_hat
-  plot((X %*% alpha_hat_normalized)[plt_indices], d[plt_indices]) 
   
   ## Standard IPW with known true e
   ate_ipw <- sum(1 / e[T==1] * Y[T==1]) / sum(1 / e[T==1]) -  sum(1 / (1-e[T==0]) * Y[T==0]) / sum(1 / (1-e[T==0]))
