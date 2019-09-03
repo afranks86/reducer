@@ -1,0 +1,177 @@
+---
+title: "ReducerEstimation"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Notebook for exploring reduction 
+
+This notebook will explore _estimation_ in for reducer models.  For the setup and population see "ReducerNotes.Rmd".  
+
+# SNoTE
+Consider both linear mean and propensity models. Assume that $r(X)$ is also linear in $X$.
+$$
+\begin{align}
+m_0(X) &= \mathbf{\alpha}'X \quad \text{(Expectation of control outcome)}\\
+e(X) &= \text{logit}^{-1}(\mathbf{\beta}'X) \quad \text{(Propensity score)}\\
+d(X) &= \gamma'X \quad \text{(Deconfounding score)}
+\end{align}
+$$
+
+where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
+
+As a starting point, assume the true propensity scores are known and only the outcome model needs to be estiamted. 
+
+```{r}
+library(balanceHD)
+library(mvtnorm)
+library(rstiefel)
+library(glmnet)
+source("utilities.R")
+
+iters <- 25
+true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
+for(iter  in 1:iters) {
+  print(iter)
+  n = 500
+  p = 1000
+  
+  alpha <- rustiefel(p, 1) 
+  beta <- rustiefel(p, 1) 
+  
+  alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+  beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+  cor(alpha, beta)
+  
+  X <- rmvnorm(n, rep(0, p), diag(1, p))
+  mscale <- 15
+  
+  m <- mscale * X %*% alpha
+  xb <- X %*% beta 
+  escale <- 1/2
+  
+  e <- exp(escale*xb)/(1 + exp(escale*xb))
+  hist(e)
+
+  tau = 5
+  T <- rbinom(n, 1, e)
+  Y <- m +  tau * T + rnorm(n, 0, 1)
+  
+  true_ate <- tau
+    
+  # Y0 <- Y[T==0]
+  # Y1 <- Y[T==1]
+  # 
+  # mean(Y0)
+  # mean(Y0 / (1 - e[T==0]))
+  # 
+  # e_m <- predict(glm(T ~ m))
+  # mean(T * Y / e_m) - mean((1-T) * Y / (1-e_m))
+  # mean(T * Y / e) - mean((1-T) * Y / (1-e))
+  
+  
+  Y_lambda_min <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
+                            alpha=0, penalty.factor = c(0, rep(1, p)), intercept=FALSE)$lambda.min
+  glm_coefs <- coef(glmnet(cbind(T, X), Y, family="gaussian", 
+                           alpha=0, penalty.factor = c(0, rep(1, p)),intercept=FALSE, 
+                           lambda=Y_lambda_min))
+  
+  ehat <- predict(glmnet(X, T, family="binomial", alpha=0), newx=X, type="response")
+  
+  alpha_hat <- glm_coefs[-c(1:2)]
+  tau_hat <- glm_coefs[2]    
+  
+  alpha_hat_norm <- sqrt(sum(alpha_hat^2))
+  alpha_hat_normalized <- alpha_hat / alpha_hat_norm
+  
+  M <- (alpha_hat_normalized %*% t(beta) + beta %*% t(alpha_hat_normalized))/2
+  eig <- eigen(M)
+  mvecs <- eig$vectors[, c(1,p)]
+  mvals <- eig$values[c(1,p)]
+  if(abs(mvals[2]) > mvals[1]) {
+    mvals <- -mvals[2:1]
+    mvecs <- mvecs[, 2:1]
+  }
+  
+  ab_dot_prod <- abs(t(alpha_hat_normalized) %*% beta)
+  
+  w2_lim <- (t(beta) %*% mvecs)[2]
+  
+  w2 <- 0*w2_lim
+  w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
+
+  g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
+  
+  if(w2==0 & (abs(t(g) %*% beta) - abs(t(g) %*% alpha_hat_normalized) > 1e-10))
+    browser()
+  
+  d <- Re(X %*% g)
+  d_a <- X %*% alpha_hat_normalized
+  
+  res <- glm(T ~ d, family="binomial")
+  e_d <- predict(res, type="response")
+
+
+  
+  residual <- Y - X %*% alpha_hat - T * tau_hat
+  plot((X %*% alpha_hat_normalized)[plt_indices], d[plt_indices]) 
+  
+  ## Standard IPW with known true e
+  ate_ipw <- sum(1 / e[T==1] * Y[T==1]) / sum(1 / e[T==1]) -  sum(1 / (1-e[T==0]) * Y[T==0]) / sum(1 / (1-e[T==0]))
+  
+  ## Compute IPW_d, using reduced d 
+  ## w2 is the tuning parameter for how similar to e vs mhat,
+  ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
+  bias <- get_bias(T=T, residual=Y, alpha_hat_normalized=alpha_hat_normalized, 
+                  beta=beta, tau_hat=tau_hat, w2=0*w2_lim, times=1000)
+  ate_ipw_d <- bias$bias1 - bias$bias0
+
+  # Compute standard AIPW using known true e  
+  mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(1 / e[T==1] * residual[T==1]) / sum(1 / e[T==1])
+  mu_ctrl <- mean(X %*% alpha_hat) + sum(1/ (1-e[T==0]) * residual) / sum(1 / (1-e[T==0]))
+  ate_aipw <- mu_treat - mu_ctrl
+  
+  ## Compute negative regression bias by balancing on residuals
+  ## w2 is the tuning parameter for how similar to e vs mhat,
+  ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
+  bias <- get_bias(T=T, residual=residual, alpha_hat_normalized=alpha_hat_normalized, 
+                   beta=beta, tau_hat=tau_hat, w2=0*w2_lim, times=1000)
+  
+  ## Correct bias and compute AIPW_d
+  mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
+  mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
+  ate_aipw_d <- mu_treat - mu_ctrl
+
+  print(sprintf("Reg: %.3f, IPW: %.3f, IPW-d: %.3f, AIPW: %.3f, AIPW-d: %.3f",
+                tau_hat, ate_ipw, ate_ipw_d, ate_aipw, ate_aipw_d))
+  
+  true_ate_vec[iter] <- true_ate
+  tau_hat_vec[iter] <- tau_hat
+  ipw_vec[iter] <- ate_ipw
+  ipw_d_vec[iter] <- ate_ipw_d
+  aipw_vec[iter] <- ate_aipw
+  aipw_d_vec[iter] <- ate_aipw_d
+  
+} 
+
+# rmse
+sqrt(apply((rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec)^2, 1, 
+           function(x) mean(x, na.rm=TRUE)))
+
+# mean absolute error
+apply(abs(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec), 1, 
+      function(x) median(x, na.rm=TRUE))
+
+# bias
+apply(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec, 1, 
+      function(x) mean(x, na.rm=TRUE))
+
+plt_indices <- sample(1:length(e), 30)
+shrinkage_plot(e[plt_indices], e_d[plt_indices])
+par(mfrow=c(1, 2))
+hist(e, xlim=c(0, 1), col="grey")
+hist(e_d, xlim=c(0, 1), col="grey")
+```
