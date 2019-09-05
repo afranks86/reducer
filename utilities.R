@@ -7,53 +7,34 @@ shrinkage_plot <- function(a, b) {
     abline(h=0)
 }
 
-get_bias <- function(T, residual, alpha_hat_normalized, beta, tau_hat, w2=0, times=10) {
-    
-    M <- (alpha_hat_normalized %*% t(beta) + beta %*% t(alpha_hat_normalized))/2
-    eig <- eigen(M)
-    mvecs <- eig$vectors[, c(1,p)]
-    mvals <- eig$values[c(1,p)]
-    if(abs(mvals[2]) > mvals[1]) {
-        mvals <- -mvals[2:1]
-        mvecs <- mvecs[, 2:1]
-    }
-    
-    const <- abs(t(alpha_hat_normalized) %*% beta)
-    # print(const)
-
-    w2_beta_lim <- (t(beta) %*% mvecs)[2]
+get_bias <- function(T, Y, X, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=10) {
     
     N <- NullC(mvecs)
-    if(abs(w2) == abs(w2_lim)) {
+    if(abs(w2) == abs(w2lim)) {
+
+        w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
         g <- w1*mvecs[, 1] + w2 * mvecs[, 2]
         d <- Re(X %*% g)
         res <- glm(T ~ d, family="binomial")
         e_d <- predict(res, type="response")
                 
-        bias0 <- sum(1 / (1-e_d[T==0]) * residual[T==0]) / sum(1 / (1-e_d[T==0]))
-        bias1 <- sum(1 / e_d[T==1] * residual[T==1]) / sum(1 / e_d[T==1])
+        bias0 <- sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0]))
+        bias1 <- sum(1 / e_d[T==1] * Y[T==1]) / sum(1 / e_d[T==1])
         times <- 1
     }
     else  {
-        g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
-        
-        
-        w1 <- sqrt(as.numeric((const - mvals[2] * w2^2)/mvals[1]))
-        NC <- NullC(mvecs)
+
+        w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
         
         bias0 <- bias1 <- 0
         for(i in 1:times) {
-            g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NC %*% rustiefel(p-2, 1)
-            
-            if(w2==0 & (abs(t(g) %*% beta) - abs(t(g) %*% alpha_hat_normalized) > 1e-10))
-                browser()
-            
+            g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
             d <- Re(X %*% g)
             res <- glm(T ~ d, family="binomial")
             e_d <- predict(res, type="response")
             
-            bias0 <- bias0 + sum(1 / (1-e_d[T==0]) * residual[T==0]) / sum(1 / (1-e_d[T==0]))
-            bias1 <- bias1 + sum(1 / e_d[T==1] * residual[T==1]) / sum(1 / e_d[T==1])
+            bias0 <- bias0 + sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0]))
+            bias1 <- bias1 + sum(1 / e_d[T==1] * Y[T==1]) / sum(1 / e_d[T==1])
 
             if(is.na(bias0) | is.na(bias1))
                 browser()
