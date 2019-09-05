@@ -1,10 +1,10 @@
-library(balanceHD)
+ library(balanceHD)
 library(mvtnorm)
 library(rstiefel)
 library(glmnet)
 source("utilities.R")
 
-w2_scale_vec <- c(1, seq(0.95, 0.5, by=-0.05))
+w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
 w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
 iters <- 100
 
@@ -15,6 +15,7 @@ for(j in 1:length(w2_scale_vec)) {
     w2scale <- w2_scale_vec[j]
 
     for(iter  in 1:iters) {
+
         print(paste(w2scale, iter, sep=", "))
         n = 1000
         p = 1000
@@ -26,12 +27,13 @@ for(j in 1:length(w2_scale_vec)) {
         beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
         cor(alpha, beta)
         
-        X <- rmvnorm(n, rep(0, p), diag(1, p))
+        ## X <- rmvnorm(n, rep(0, p), diag(1, p))
+        X <- matrix(rnorm(n * p), nrow=n, ncol=p)
         mscale <- 15
         
         m <- mscale * X %*% alpha
         xb <- X %*% beta 
-        escale <- 1/2
+        escale <- 3
         
         e <- exp(escale*xb)/(1 + exp(escale*xb))
 
@@ -41,19 +43,9 @@ for(j in 1:length(w2_scale_vec)) {
         
         true_ate <- tau
         
-        ## Y0 <- Y[T==0]
-        ## Y1 <- Y[T==1]
-        
-        ## mean(Y0)
-        ## mean(Y0 / (1 - e[T==0]))
-        
-        ## e_m <- predict(glm(T ~ m))
-        ## mean(T * Y / e_m) - mean((1-T) * Y / (1-e_m))
-        ## mean(T * Y / e) - mean((1-T) * Y / (1-e))
-        
-        
-        Y_lambda_min <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
-                                  alpha=0, penalty.factor = c(0, rep(1, p)), intercept=FALSE)$lambda.min
+        # Y_lambda_min <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
+                                        #                          alpha=0, penalty.factor = c(0, rep(1, p)), intercept=FALSE)$lambda.min
+        Y_lambda_min <- 115
         glm_coefs <- coef(glmnet(cbind(T, X), Y, family="gaussian", 
                                  alpha=0, penalty.factor = c(0, rep(1, p)),intercept=FALSE, 
                                  lambda=Y_lambda_min))
@@ -65,48 +57,41 @@ for(j in 1:length(w2_scale_vec)) {
         
         alpha_hat_norm <- sqrt(sum(alpha_hat^2))
         alpha_hat_normalized <- alpha_hat / alpha_hat_norm
+
+        ab_dot_prod <- as.numeric(abs(t(alpha_hat_normalized) %*% beta))
+
+        mvecs <- cbind((alpha_hat_normalized + beta)/sqrt(2 + 2 * ab_dot_prod),
+                       (alpha_hat_normalized - beta)/sqrt(2 - 2 * ab_dot_prod))
+        mvals <- c((ab_dot_prod + 1)/2, (ab_dot_prod - 1)/2)
+
+
+        ## M <- (alpha_hat_normalized %*% t(beta) + beta %*% t(alpha_hat_normalized))/2
+        ## eig <- eigen(M)
+        ## mvecs2 <- eig$vectors[, c(1,p)]  
+        ## mvals2 <- eig$values[c(1,p)]
         
-        M <- (alpha_hat_normalized %*% t(beta) + beta %*% t(alpha_hat_normalized))/2
-        eig <- eigen(M)
-        mvecs <- eig$vectors[, c(1,p)]
-        mvals <- eig$values[c(1,p)]
         if(abs(mvals[2]) > mvals[1]) {
             mvals <- -mvals[2:1]
             mvecs <- mvecs[, 2:1]
         }
         
-        ab_dot_prod <- abs(t(alpha_hat_normalized) %*% beta)
-        
-        w2_beta_lim <- (t(beta) %*% mvecs)[2]
-        w2_alpha_lim <- (t(alpha_hat_normalized) %*% mvecs)[2]
-        
-        w2 <- w2scale*w2_lim
+        w2_lim <- -sqrt((1-ab_dot_prod)/2)
+        w2 <- w2scale * w2_lim
 
-        ## udv <- svd(X %*% N %*% t(N))
-        ## v <- udv$v[, 1]
-        ## var(X %*% N %*% rustiefel(p-2, 1))
-        ## g <- w1*mvecs[, 1] + lw2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * v
-        ## g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
+        ## N <- NullC(mvecs)
+        ## if(abs(w2) == abs(w2_lim))
+        ##     g <- w1*mvecs[, 1] + w2 * mvecs[, 2]
+        ## else 
+        ##     g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
+        
+        ## if(w2==0 & (abs(t(g) %*% beta) - abs(t(g) %*% alpha_hat_normalized) > 1e-10))
+        ##     browser()
         
         ## d <- Re(X %*% g)
+        ## d_a <- X %*% alpha_hat_normalized
+        
         ## res <- glm(T ~ d, family="binomial")
         ## e_d <- predict(res, type="response")
-        ## sum(1 / e_d[T==1] * Y[T==1]) / sum(1 / e_d[T==1]) - sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0])) 
-
-        N <- NullC(mvecs)
-        if(abs(w2) == abs(w2_lim))
-            g <- w1*mvecs[, 1] + w2 * mvecs[, 2]
-        else 
-            g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
-        
-        if(w2==0 & (abs(t(g) %*% beta) - abs(t(g) %*% alpha_hat_normalized) > 1e-10))
-            browser()
-        
-        d <- Re(X %*% g)
-        d_a <- X %*% alpha_hat_normalized
-        
-        res <- glm(T ~ d, family="binomial")
-        e_d <- predict(res, type="response")
         
         residual <- Y - X %*% alpha_hat - T * tau_hat
         
@@ -116,8 +101,8 @@ for(j in 1:length(w2_scale_vec)) {
         ## Compute IPW_d, using reduced d 
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
-        bias <- get_bias(T=T, residual=Y, alpha_hat_normalized=alpha_hat_normalized, 
-                         beta=beta, tau_hat=tau_hat, w2=w2, times=1000)
+        bias <- get_bias(T=T, Y=Y, X=X, mvecs=mvecs, mvals=mvals,
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=10)
         ate_ipw_d <- bias$bias1 - bias$bias0
 
         ## Compute standard AIPW using known true e  
@@ -128,9 +113,9 @@ for(j in 1:length(w2_scale_vec)) {
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
-        bias <- get_bias(T=T, residual=residual, alpha_hat_normalized=alpha_hat_normalized, 
-                         beta=beta, tau_hat=tau_hat, w2=w2, times=1000)
-        
+        bias <- get_bias(T=T, Y=residual, X=X, mvecs=mvecs, mvals=mvals,
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=10)
+
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
         mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
@@ -170,6 +155,8 @@ for(j in 1:length(w2_scale_vec)) {
     apply((sign(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec)+1)/2, 1, 
           function(x) mean(x, na.rm=TRUE))
 
+    save(results_array, file=sprintf("results_n%i_p%i_escale%.1f.RData", n, p ,escale))
+
 }
 
 dimnames(results_array) <- list(1:iters, c("Regression", "IPW", "IPW_d", "AIPW", "AIPW_d"), w2_scale_vec)
@@ -187,10 +174,13 @@ as_tibble(results_array[, , "0.5"]) %>%
     geom_density_ridges(aes(x=Estimate, y=Type, fill=Type), stat="binline") +
     geom_vline(xintercept=5) + theme_bw()
 
-rmse_mat <- apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
+rmse_mat <- apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))[, -c(2,24)]
 
 
-tibble(rmse_mat) 
+tib <- as_tibble(t(rmse_mat))
+tib$value <- as.numeric(colnames(rmse_mat))
+tib %>% gather(key=Type, value=RMSE, -value) %>%
+    ggplot() + geom_line(aes(x=value, y=RMSE, col=Type))
 
 
 
