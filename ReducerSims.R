@@ -4,18 +4,18 @@ library(rstiefel)
 library(glmnet)
 source("utilities.R")
 
-w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
-w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
+## w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
+## w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
+w2_scale_vec <- c(seq(1, 0.8, by=-.01))
 iters <- 100
 
 true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
 results_array <- array(dim=c(iters, 5, length(w2_scale_vec)))
 
-for(j in 1:length(w2_scale_vec)) {
-    w2scale <- w2_scale_vec[j]
-
-    for(iter  in 1:iters) {
-
+for(iter  in 1:iters) {
+    for(j in 1:length(w2_scale_vec)) {
+        w2scale <- w2_scale_vec[j]
+        
         print(paste(w2scale, iter, sep=", "))
         n = 1000
         p = 1000
@@ -101,7 +101,7 @@ for(j in 1:length(w2_scale_vec)) {
         ## Compute IPW_d, using reduced d 
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
-        bias <- get_bias(T=T, Y=Y, X=X, mvecs=mvecs, mvals=mvals,
+        bias <- get_bias(T=T, Y=Y, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
                          ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=10)
         ate_ipw_d <- bias$bias1 - bias$bias0
 
@@ -113,7 +113,7 @@ for(j in 1:length(w2_scale_vec)) {
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
-        bias <- get_bias(T=T, Y=residual, X=X, mvecs=mvecs, mvals=mvals,
+        bias <- get_bias(T=T, Y=residual, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
                          ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=10)
 
         ## Correct bias and compute AIPW_d
@@ -164,7 +164,9 @@ sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE
 
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
-save(results_array, file=sprintf("results_n%i_p%i_escale%.1f.RData", n, p ,escale))
+library(lubridate)
+
+save(results_array, file=sprintf("results_n%i_p%i_escale%.1f_%s.RData", n, p ,escale, today()))
 
 library(tidyverse)
 library(ggridges)
