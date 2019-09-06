@@ -20,10 +20,8 @@ get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=
         ## e_old <- predict(res, type="response")
         
         c1 <- as.numeric(t(xb/sqrt(sum(xb^2))) %*% d/sqrt(sum(d^2)))
-        c2 <- sqrt(1-c1^2)
-        normal_samples <- rnorm(10000, sd=1)
         e_d <- sapply(d, function(di) {
-            mean(invlogit(escale*(c1*di + c2*normal_samples), a=0, b=1))
+            mean(invlogit(escale*(c1*di), a=0, b=1))
         })
                 
         bias0 <- sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0]))
@@ -34,13 +32,15 @@ get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=
 
         w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
         bias0 <- bias1 <- 0
+        normal_samples <- rnorm(10000, sd=1)
         for(i in 1:times) {
+            
             g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
             d <- Re(X %*% g)
 
             c1 <- as.numeric(t(xb/sqrt(sum(xb^2))) %*% d/sqrt(sum(d^2)))
             c2 <- sqrt(1-c1^2)
-            normal_samples <- rnorm(10000, sd=1)
+
             e_d <- sapply(d, function(di) {
                 mean(invlogit(escale*(c1*di + c2*normal_samples), a=0, b=1))
             })
