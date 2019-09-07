@@ -10,56 +10,36 @@ shrinkage_plot <- function(a, b) {
 get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=10) {
     
     N <- NullC(mvecs)
-    # This first code path is deprecated
-    if(FALSE && (abs(w2) == abs(w2lim))) {
 
-        w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
-        g <- w1*mvecs[, 1] + w2 * mvecs[, 2]
+    w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
+    bias0 <- bias1 <- 0
+    normal_samples <- rnorm(500, sd=1)
+                                        #biases <- rep(NA, times)
+
+    for(i in 1:times) {
+        
+        g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(max(1-w1^2 - w2^2, 0)) * N %*% rustiefel(p-2, 1)
         d <- Re(X %*% g)
-        
-        ## res <- glm(T ~ d, family="binomial")
-        ## e_old <- predict(res, type="response")
-        
+
         c1 <- as.numeric(t(xb/sqrt(sum(xb^2))) %*% d/sqrt(sum(d^2)))
+        c2 <- sqrt(max(1-c1^2, 0))
+
         e_d <- sapply(d, function(di) {
-            mean(invlogit(escale*(c1*di), a=0, b=1))
+            mean(invlogit(escale*(c1*di + c2*normal_samples), a=0, b=1))
         })
-                
-        bias0 <- sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0]))
-        bias1 <- sum(1 / e_d[T==1] * Y[T==1]) / sum(1 / e_d[T==1])
-        times <- 1
+        
+        ## res <- glm(T ~ d - 1, family="binomial")
+        ## e_d <- predict(res, type="response")
+        
+        bias0 <- bias0 + sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0]))
+        bias1 <- bias1 + sum(1 / e_d[T==1] * Y[T==1]) / sum(1 / e_d[T==1])
+
+        if(is.na(bias0) | is.na(bias1))
+            browser()
+                                        #biases[i] <- mybias1 - mybias0
+        
     }
-    else  {
 
-        w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
-        bias0 <- bias1 <- 0
-        normal_samples <- rnorm(500, sd=1)
-        #biases <- rep(NA, times)
-
-        for(i in 1:times) {
-            
-            g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(max(1-w1^2 - w2^2, 0)) * N %*% rustiefel(p-2, 1)
-            d <- Re(X %*% g)
-
-            c1 <- as.numeric(t(xb/sqrt(sum(xb^2))) %*% d/sqrt(sum(d^2)))
-            c2 <- sqrt(max(1-c1^2, 0))
-
-            e_d <- sapply(d, function(di) {
-                mean(invlogit(escale*(c1*di + c2*normal_samples), a=0, b=1))
-            })
-            
-            ## res <- glm(T ~ d - 1, family="binomial")
-            ## e_d <- predict(res, type="response")
-            
-            bias0 <- bias0 + sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0]))
-            bias1 <- bias1 + sum(1 / e_d[T==1] * Y[T==1]) / sum(1 / e_d[T==1])
-
-            if(is.na(bias0) | is.na(bias1))
-                browser()
-            #biases[i] <- mybias1 - mybias0
-            
-        }
-    }
     #print(summary(biases))
     list(bias0=bias0/times, bias1=bias1/times)
 }
