@@ -35,7 +35,7 @@ for(iter  in 1:iters) {
     
     m <- mscale * X %*% alpha
     xb <- X %*% beta 
-    escale <- 3
+    escale <- 1/2
     
     e <- exp(escale*xb)/(1 + exp(escale*xb))
 
@@ -170,7 +170,7 @@ as_tibble(results_array[, , "0.6"]) %>%
     geom_density_ridges(aes(x=Estimate, y=Type, fill=Type), stat="binline") +
     geom_vline(xintercept=5) + theme_bw()
 
-rmse_mat <- apply(abs(results_array - true_ate), c(2, 3), function(x) mean(x, na.rm=TRUE))[, -c(2,24)]
+rmse_mat <- sqrt(apply(abs(results_array - true_ate), c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
 
 tib <- as_tibble(t(rmse_mat))
