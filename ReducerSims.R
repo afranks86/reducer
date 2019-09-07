@@ -35,11 +35,11 @@ for(iter  in 1:iters) {
     
     ## X <- rmvnorm(n, rep(0, p), diag(1, p))
     X <- matrix(rnorm(n * p), nrow=n, ncol=p)
-    mscale <- 15
+    mscale <- -15
     
     m <- mscale * X %*% alpha
     xb <- X %*% beta 
-    escale <- 1/2
+    escale <- 3
     
     e <- exp(escale*xb)/(1 + exp(escale*xb))
 
@@ -54,7 +54,7 @@ for(iter  in 1:iters) {
                              lambda=Y_lambda_min))
     
     ehat <- predict(glmnet(X, T, family="binomial", alpha=0), newx=X, type="response")
-    
+
     alpha_hat <- glm_coefs[-c(1:2)]
     tau_hat <- glm_coefs[2]    
     
@@ -101,7 +101,8 @@ for(iter  in 1:iters) {
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
         bias <- get_bias(T=T, Y=Y, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
+                         ab_dot_prod=ab_dot_prod, escale=escale,
+                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
 
         ate_ipw_d <- bias$bias1 - bias$bias0
 
@@ -114,7 +115,8 @@ for(iter  in 1:iters) {
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
         bias <- get_bias(T=T, Y=residual, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
+                         ab_dot_prod=ab_dot_prod, escale=escale,
+                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
 
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
@@ -156,7 +158,7 @@ for(iter  in 1:iters) {
           function(x) mean(x, na.rm=TRUE))
 
     save(results_array,
-         file=sprintf("results_n%i_p%i_escale%.1f_wmax%.2f_wmin%.2f_%s.RData",
+         file=sprintf("results_negn%i_p%i_escale%.1f_wmax%.2f_wmin%.2f_%s.RData",
                       n, p ,escale,
                       max(w2_scale_vec), min(w2_scale_vec),
                       today()))
@@ -176,6 +178,7 @@ save(results_array,
 library(tidyverse)
 library(ggridges)
 library(superheat)
+library(patchwork)
 as_tibble(results_array[, , "0.6"]) %>%
     gather(key=Type, value=Estimate) %>%
     ggplot() +
@@ -183,19 +186,30 @@ as_tibble(results_array[, , "0.6"]) %>%
     geom_vline(xintercept=5) + theme_bw()
 
 
-rmse_mat <- sqrt(apply(abs(results_array - true_ate), c(2, 3), function(x) mean(x, na.rm=TRUE)))
+rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
 bias_mat <- apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE))
 var_mat <- rmse_mat^2 - bias_mat^2
 
+
 tib <- as_tibble(t(rmse_mat))
 tib$value <- as.numeric(colnames(rmse_mat))
-tib %>% gather(key=Type, value=RMSE, -value) %>%
-    ggplot() + geom_line(aes(x=value, y=RMSE, col=Type)) + ylim(c(0, 5))
+rmse_plot <- tib %>% gather(key=Type, value=RMSE, -value) %>%
+    ggplot() + geom_line(aes(x=value, y=RMSE, col=Type)) +
+    theme_bw() + theme(legend.position="none")
 
 tib <- as_tibble(t(bias_mat))
 tib$value <- as.numeric(colnames(bias_mat))
-tib %>% gather(key=Type, value=Bias, -value) %>%
-    ggplot() + geom_line(aes(x=value, y=Bias, col=Type)) + ylim(c(-5, 5))
+bias_plot <- tib %>% gather(key=Type, value=Bias, -value) %>%
+    ggplot() + geom_line(aes(x=value, y=Bias, col=Type)) +
+    theme_bw() + theme(legend.position="none")
+
+tib <- as_tibble(t(var_mat))
+tib$value <- as.numeric(colnames(bias_mat))
+var_plot <- tib %>% gather(key=Type, value=Var, -value) %>%
+    ggplot() + geom_line(aes(x=value, y=Var, col=Type)) + theme_bw() 
+
+
+rmse_plot + bias_plot + var_plot
 
 cor(results_array[, "IPW_d",  ])
 superheat::superheat(cor(results_array[, "AIPW_d",  ]))
