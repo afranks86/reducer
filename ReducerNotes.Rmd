@@ -271,10 +271,19 @@ u_1 &= \frac{(\alpha + \beta)}{\sqrt{2 + 2\alpha'\beta}}, u_2 = \frac{(\alpha - 
 \end{align}
 $$
 
-Then we have a solution characterized by the hyperbola
+Then we have a solution characterized by the $p-2$--dimensional hyperbola
 
-$$ \frac{\alpha'\beta + 1}{2\alpha'\beta}\left(\frac{(\alpha + \beta)'\gamma}{\sqrt{2 + 2\alpha'\beta}}\right)^2 - \frac{\alpha'\beta - 1}{2\alpha'\beta}\left(\frac{(\alpha - \beta)'\gamma}{\sqrt{2 - 2\alpha'\beta}}\right)^2 = 1$$
-for $w_i = \gamma'u_i$ and $\lambda_2$ is the absolute value of the negative eigenvalue in $\Lambda$.  A couple things to note:
+$$ \frac{\lambda_1}{\alpha'\beta}w_1 - \frac{\lambda_2}{\alpha'\beta}w_2 = 1$$
+for $w_i = \gamma'u_i$ and $\lambda_2$ is the absolute value of the negative eigenvalue in $\Lambda$.
+
+Written a little bit more explicitly:
+$$
+ \gamma'(\lambda_1 u_1 - \lambda_2 u_2) = \alpha'\beta
+$$
+Note that this constrains two specific projections of $\gamma$, but leaves all other dimensions free.
+
+A couple things to note:
+
 
 
 - $w_2 = 0$ corresponds to a solution in which $\gamma$ is equiangular with $\alpha$ and $\beta$. Such solutions can be found as $\sqrt{\frac{\alpha'\beta}{\lambda_1}}u_1 + \sqrt{(1-\frac{\alpha'\beta}{\lambda_1})}z \text{ for all } z \in Null(U)$

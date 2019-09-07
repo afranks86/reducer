@@ -2,12 +2,13 @@ library(balanceHD)
 library(mvtnorm)
 library(rstiefel)
 library(glmnet)
+library(lubridate)
 source("utilities.R")
 
 ## w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
 ## w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
-w2_scale_vec <- c(seq(1, 0, by=-.05))
-iters <- 25
+w2_scale_vec <- c(seq(1, -1, by=-.1))
+iters <- 100
 
 true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
 results_array <- array(dim=c(iters, 5, length(w2_scale_vec)))
@@ -79,13 +80,17 @@ for(iter  in 1:iters) {
         residual <- Y - X %*% alpha_hat - T * tau_hat
         
         ## Standard IPW with known true e
-        ate_ipw <- sum(1 / e[T==1] * Y[T==1]) / sum(1 / e[T==1]) -  sum(1 / (1-e[T==0]) * Y[T==0]) / sum(1 / (1-e[T==0]))
+        ate_ipw <- ipw_est(e, T, Y, hajek=TRUE)
+        #ate_ipw_manual <- sum(1 / e[T==1] * Y[T==1]) / sum(1 / e[T==1]) -  sum(1 / (1-e[T==0]) * Y[T==0]) / sum(1 / (1-e[T==0]))
+        ate_ipw_manual <- mean(1 / e * Y * (T ==1) - 1 / (1 - e) * Y * (T==0))
+        print(c(ate_ipw, ate_ipw_manual))
         
         ## Compute IPW_d, using reduced d 
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
         bias <- get_bias(T=T, Y=Y, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=10)
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50)
+
         ate_ipw_d <- bias$bias1 - bias$bias0
 
         ## Compute standard AIPW using known true e  
@@ -97,7 +102,7 @@ for(iter  in 1:iters) {
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
         bias <- get_bias(T=T, Y=residual, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=10)
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50)
 
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
@@ -150,8 +155,6 @@ sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE
 
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
-library(lubridate)
-
 save(results_array,
      file=sprintf("results_n%i_p%i_escale%.1f_wmax%.2f_wmin%.2f_%s.RData",
                   n, p , escale,
@@ -160,6 +163,7 @@ save(results_array,
 
 library(tidyverse)
 library(ggridges)
+library(superheat)
 as_tibble(results_array[, , "0.6"]) %>%
     gather(key=Type, value=Estimate) %>%
     ggplot() +
