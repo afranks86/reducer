@@ -120,7 +120,8 @@ for(iter  in 1:iters) {
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
         bias <- get_bias(T=T, Y=Y, X=X, xb=X %*% beta_hat, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
+                         ab_dot_prod=ab_dot_prod, escale=beta_hat_norm,
+                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
 
         ate_ipw_d <- bias$bias1 - bias$bias0
 
@@ -134,7 +135,7 @@ for(iter  in 1:iters) {
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
         bias <- get_bias(T=T, Y=residual, X=X, xb=X %*% beta_hat,
                          mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2,
+                         ab_dot_prod=ab_dot_prod, w2=w2, escale=beta_hat_norm,
                          w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
 
         ## Correct bias and compute AIPW_d
