@@ -32,7 +32,13 @@ get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=
           print(sprintf("Hyperbola condition: %s",
                         round((alpha_hat_normalized %*% as.vector(g)) *
                                 (as.vector(g) %*% beta) - (alpha_hat_normalized %*% beta), 4)))
-          
+         
+          if(w2 == -sqrt(abs(mvals[2])))
+            print(sprintf("Checking that w2 = min corresponds to e(X): %s",
+                          round(cor(g, beta), 4)))
+          if(w2 == sqrt(abs(mvals[2])))
+            print(sprintf("Checking that w2 = max corresponds to mhat(X): %s",
+                          round(cor(g, alpha_hat_normalized), 4)))
           if(w2 == 0)
             print(sprintf("Checking that w2 = 0 correspond to bisector: %s",
                           round(sum(alpha_hat_normalized %*% as.vector(g) - beta %*% as.vector(g)), 4)))

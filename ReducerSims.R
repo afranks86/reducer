@@ -8,6 +8,8 @@ source("utilities.R")
 ## w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
 ## w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
 eigen_debug <- FALSE
+bias_debug <- FALSE
+bias_times <- if(bias_debug) 1 else 50
 
 w2_scale_vec <- c(seq(1, -1, by=-.1))
 iters <- 20
@@ -87,7 +89,7 @@ for(iter  in 1:iters) {
         # w2 limits are determined by the eigenvalue corresponding to the "closed"
         # side of the hyperbola.
         # at w2 = w2_lim, d(X) = e(X); at w2 = -w2_lim, d(X) = mhat(X)
-        w2_lim <- -sqrt(abs(mvecs[2]))
+        w2_lim <- -sqrt(abs(mvals[2]))
         w2 <- w2scale * w2_lim
 
         residual <- Y - X %*% alpha_hat - T * tau_hat
@@ -99,7 +101,7 @@ for(iter  in 1:iters) {
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
         bias <- get_bias(T=T, Y=Y, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50, DEBUG=FALSE)
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
 
         ate_ipw_d <- bias$bias1 - bias$bias0
 
@@ -112,7 +114,7 @@ for(iter  in 1:iters) {
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
         bias <- get_bias(T=T, Y=residual, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50, DEBUG=FALSE)
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
 
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
