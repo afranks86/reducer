@@ -7,6 +7,7 @@ source("utilities.R")
 
 ## w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
 ## w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
+
 w2_scale_vec <- c(seq(1, -1, by=-.1))
 iters <- 100
 
@@ -170,13 +171,20 @@ as_tibble(results_array[, , "0.6"]) %>%
     geom_density_ridges(aes(x=Estimate, y=Type, fill=Type), stat="binline") +
     geom_vline(xintercept=5) + theme_bw()
 
-rmse_mat <- sqrt(apply(abs(results_array - true_ate), c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
+rmse_mat <- sqrt(apply(abs(results_array - true_ate), c(2, 3), function(x) mean(x, na.rm=TRUE)))
+bias_mat <- apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE))
+var_mat <- rmse_mat^2 - bias_mat^2
 
 tib <- as_tibble(t(rmse_mat))
 tib$value <- as.numeric(colnames(rmse_mat))
 tib %>% gather(key=Type, value=RMSE, -value) %>%
-    ggplot() + geom_line(aes(x=value, y=RMSE, col=Type))
+    ggplot() + geom_line(aes(x=value, y=RMSE, col=Type)) + ylim(c(0, 5))
+
+tib <- as_tibble(t(bias_mat))
+tib$value <- as.numeric(colnames(bias_mat))
+tib %>% gather(key=Type, value=Bias, -value) %>%
+    ggplot() + geom_line(aes(x=value, y=Bias, col=Type)) + ylim(c(-5, 5))
 
 cor(results_array[, "IPW_d",  ])
 superheat::superheat(cor(results_array[, "AIPW_d",  ]))

@@ -23,8 +23,6 @@ $$
 
 where $\alpha$ is an $p \times m_\alpha$ matrix and $\beta$ is a $p \times m_\beta$ matrix with $m < p$.  Assume (welog?) that $\alpha$ and $\beta$ are semi-orthogonal matrices, e.g. $\alpha^T\alpha = I$.  
 
-
-
 As a starting point, assume the true propensity scores are known and only the outcome model needs to be estiamted. 
 
 ```{r}
@@ -34,10 +32,10 @@ library(rstiefel)
 library(glmnet)
 
 
-iters <- 100
-tau_hat_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
+iters <- 25
+true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
 for(iter  in 1:iters) {
-  
+  print(iter)
   n = 500
   p = 1000
   
@@ -49,30 +47,37 @@ for(iter  in 1:iters) {
   cor(alpha, beta)
   
   X <- rmvnorm(n, rep(0, p), diag(1, p))
-  ## X <- matrix(2 * runif(p*n) - 1, nc=p)
   mscale <- 15
   
   m <- mscale * X %*% alpha
   xb <- X %*% beta 
-  escale <- 3
+  escale <- 1/2
   
   e <- exp(escale*xb)/(1 + exp(escale*xb))
-  
-  tau = 1
+  hist(e)
+
+  tau = 5
   T <- rbinom(n, 1, e)
-  Y <- m +  tau * T * ( 1 + X[, 1]^2) + rnorm(n, 0, 1)
+  Y <- m +  tau * T + rnorm(n, 0, 1)
   
-  Y0 <- Y[T==0]
-  Y1 <- Y[T==1]
+  # Y0 <- Y[T==0]
+  # Y1 <- Y[T==1]
+  # 
+  # mean(Y0)
+  # mean(Y0 / (1 - e[T==0]))
+  # 
+  # e_m <- predict(glm(T ~ m))
+  # mean(T * Y / e_m) - mean((1-T) * Y / (1-e_m))
+  # mean(T * Y / e) - mean((1-T) * Y / (1-e))
   
-  mean(Y0)
-  mean(Y0 / (1 - e[T==0]))
   
   Y_lambda_min <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
                             alpha=0, penalty.factor = c(0, rep(1, p)), intercept=FALSE)$lambda.min
   glm_coefs <- coef(glmnet(cbind(T, X), Y, family="gaussian", 
                            alpha=0, penalty.factor = c(0, rep(1, p)),intercept=FALSE, 
                            lambda=Y_lambda_min))
+  
+  ehat <- predict(glmnet(X, T, family="binomial", alpha=0), newx=X, type="response")
   
   alpha_hat <- glm_coefs[-c(1:2)]
   tau_hat <- glm_coefs[2]    
@@ -89,20 +94,19 @@ for(iter  in 1:iters) {
     mvecs <- mvecs[, 2:1]
   }
   
-  const <- abs(t(alpha_hat_normalized) %*% beta)
-  # print(const)
+  ab_dot_prod <- abs(t(alpha_hat_normalized) %*% beta)
   
   w2_lim <- (t(beta) %*% mvecs)[2]
   
-  w2 <- -0.5
-  w1 <- sqrt(as.numeric((const - mvals[2] * w2^2)/mvals[1]))
+  w2 <- 0*w2_lim
+  w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
 
-  g1 <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
+  g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
   
-  if(w2==0 & (abs(t(g1) %*% beta) - abs(t(g1) %*% alpha_hat_normalized) > 1e-10))
+  if(w2==0 & (abs(t(g) %*% beta) - abs(t(g) %*% alpha_hat_normalized) > 1e-10))
     browser()
   
-  d <- Re(X %*% g1)
+  d <- Re(X %*% g)
   d_a <- X %*% alpha_hat_normalized
   
   res <- glm(T ~ d, family="binomial")
@@ -110,83 +114,55 @@ for(iter  in 1:iters) {
   
   e_d <- predict(res, type="response")
 
-  g2 <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
-  res2 <- glm(T ~ (X %*% g2), family="binomial")
-  
-  e_d2 <- predict(res2, type="response")
-  
-  g3 <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
-  res3 <- glm(T ~ (X %*% g3), family="binomial")
-  e_d3 <- predict(res3, type="response")
-
-  
-  
   plt_indices <- sample(1:length(e), 30)
-
-  par(mfrow=c(1, 3))  
   shrinkage_plot(e[plt_indices], e_d[plt_indices])
-  shrinkage_plot(e[plt_indices], e_d2[plt_indices])
-  shrinkage_plot(e[plt_indices], ((e_d + e_d2)/2)[plt_indices])
   
-  print(mean((e - 1/2) * (e_d - 1/2) < 0))
-  print(mean((e - 1/2) * (e_d2 - 1/2) < 0))
-  print(mean((e - 1/2) * (e_d3 - 1/2) < 0))
-  print(mean((e - 1/2) * ((e_d+e_d2+e_d3)/3 - 1/2) < 0))
-  
-  e_avg <- (e_d+e_d2+e_d3)/3
-  
-  shrinkage_plot(e[plt_indices], e_avg[plt_indices])
-  
-  par(mfrow=c(1,1))
-  
-  
-  plot(e, e_d, pch=19)
-  plot(e, e_d2, pch=19)
-  abline(h=1/2, v=1/2, lty=2)
-  
-  plot(e_d, e_d2)
-  abline(h=1/2, v=1/2, lty=2)
-  print(mean(sign(e - 1/2) * (e_d - 1/2)))
-  print(mean(sign(e_d - 1/2) * (e_d2 - 1/2)))
-
   residual <- Y - X %*% alpha_hat - T * tau_hat
+  plot((X %*% alpha_hat_normalized)[plt_indices], d[plt_indices]) 
+ 
+  ate_ipw <- sum(1 / e[T==1] * Y[T==1]) / sum(1 / e[T==1]) -  sum(1 / (1-e[T==0]) * Y[T==0]) / sum(1 / (1-e[T==0]))
+  
+  bias <- get_bias(T=T, residual=Y, alpha_hat_normalized=alpha_hat_normalized, 
+                  beta=beta, tau_hat=tau_hat, w2=0.97*w2_lim, times=1000)
+  ate_ipw_d <- bias$bias1 - bias$bias0
+
   
   mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(T / e * residual) / sum(T / e)
-  mu_ctrl <- mean(X %*% alpha_hat) + sum((1-T) / (1-e) * residual) / sum((1-T) / e)
+  mu_ctrl <- mean(X %*% alpha_hat) + sum((1-T) / (1-e) * residual) / sum((1-T) / (1-e))
   
-  ate_hat <- mu_treat - mu_ctrl
-  ate_hat
+  ate_aipw <- mu_treat - mu_ctrl
   
-  bias <- get_bias(T, residual, alpha_hat_normalized, beta, tau_hat, w2=-0.58, times=100)
+  bias <- get_bias(T=T, residual=residual, alpha_hat_normalized=alpha_hat_normalized, 
+                   beta=beta, tau_hat=tau_hat, w2=-0.95*w2_lim, times=1000)
   
   mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
   mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
-  ate_hat_d <- mu_treat - mu_ctrl
-  ate_hat_d
+  ate_aipw_d <- mu_treat - mu_ctrl
   
-  print(paste(tau_hat, ate_hat, ate_hat_d, sep=", "))
+
+  print(true_ate)
+  print(paste(tau_hat, ate_ipw, ate_ipw_d, ate_aipw, ate_aipw_d, sep=", "))
   
+  true_ate_vec[iter] <- true_ate
   tau_hat_vec[iter] <- tau_hat
-  aipw_vec[iter] <- ate_hat
-  aipw_d_vec[iter] <- ate_hat_d
-  
+  ipw_vec[iter] <- ate_ipw
+  ipw_d_vec[iter] <- ate_ipw_d
+  aipw_vec[iter] <- ate_aipw
+  aipw_d_vec[iter] <- ate_aipw_d
   
 } 
 
+# rmse
+sqrt(apply((rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec)^2, 1, 
+           function(x) mean(x, na.rm=TRUE)))
 
-mean((tau_hat_vec)^2)
-mean((aipw_vec)^2)
-mean((aipw_d_vec)^2)
+# mean absolute error
+apply(abs(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec), 1, 
+      function(x) median(x, na.rm=TRUE))
 
-true_ate <- mean(tau * ( 1 + X[, 1]))
-apply((rbind(tau_hat_vec, aipw_vec, aipw_d_vec) - true_ate)^2, 1, mean)
-apply(abs(rbind(tau_hat_vec, aipw_vec, aipw_d_vec) - true_ate), 1, median)
-# 
-# 
-# tau.hat = residualBalance.ate(X, Y, W, estimate.se = TRUE)
-# print(paste("true tau:", tau))
-# print(paste("point estimate:", round(tau.hat[1], 2)))
-# print(paste0("95% CI for tau: (", round(tau.hat[1] - 1.96 * tau.hat[2], 2), ", ", round(tau.hat[1] + 1.96 * tau.hat[2], 2), ")"))
+# bias
+apply(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec, 1, 
+      function(x) mean(x, na.rm=TRUE))
 
 
 ```

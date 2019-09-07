@@ -36,7 +36,7 @@ iters <- 25
 true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
 for(iter  in 1:iters) {
   print(iter)
-  n = 500
+  n = 1000
   p = 1000
   
   alpha <- rustiefel(p, 1) 
@@ -51,7 +51,7 @@ for(iter  in 1:iters) {
   
   m <- mscale * X %*% alpha
   xb <- X %*% beta 
-  escale <- 1
+  escale <- 8
   
   e <- exp(escale*xb)/(1 + exp(escale*xb))
 
@@ -99,10 +99,23 @@ for(iter  in 1:iters) {
   
   w2_lim <- (t(beta) %*% mvecs)[2]
   
-  w2 <- 0*w2_lim
+  w2 <- 0.9*w2_lim
   w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
 
-  g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * NullC(mvecs) %*% rustiefel(p-2, 1)
+
+  # udv <- svd(X %*% N %*% t(N))
+  # v <- udv$v[, 1]
+  # var(X %*% N %*% rustiefel(p-2, 1))
+  # g <- w1*mvecs[, 1] + lw2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * v
+  # g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
+  # 
+  # d <- Re(X %*% g)
+  # res <- glm(T ~ d, family="binomial")
+  # e_d <- predict(res, type="response")
+  # sum(1 / e_d[T==1] * Y[T==1]) / sum(1 / e_d[T==1]) - sum(1 / (1-e_d[T==0]) * Y[T==0]) / sum(1 / (1-e_d[T==0])) 
+
+  N <- NullC(mvecs)  
+  g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(1-w1^2 - w2^2) * N %*% rustiefel(p-2, 1)
   
   if(w2==0 & (abs(t(g) %*% beta) - abs(t(g) %*% alpha_hat_normalized) > 1e-10))
     browser()
@@ -122,7 +135,7 @@ for(iter  in 1:iters) {
   ## w2 is the tuning parameter for how similar to e vs mhat,
   ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
   bias <- get_bias(T=T, residual=Y, alpha_hat_normalized=alpha_hat_normalized, 
-                  beta=beta, tau_hat=tau_hat, w2=0*w2_lim, times=1000)
+                  beta=beta, tau_hat=tau_hat, w2=w2, times=1000)
   ate_ipw_d <- bias$bias1 - bias$bias0
 
   # Compute standard AIPW using known true e  
@@ -134,7 +147,7 @@ for(iter  in 1:iters) {
   ## w2 is the tuning parameter for how similar to e vs mhat,
   ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
   bias <- get_bias(T=T, residual=residual, alpha_hat_normalized=alpha_hat_normalized, 
-                   beta=beta, tau_hat=tau_hat, w2=0*w2_lim, times=1000)
+                   beta=beta, tau_hat=tau_hat, w2=w2, times=1000)
   
   ## Correct bias and compute AIPW_d
   mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
@@ -165,9 +178,13 @@ apply(abs(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_at
 apply(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec, 1, 
       function(x) mean(x, na.rm=TRUE))
 
+# neg/pos bias fraction
+apply((sign(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec)+1)/2, 1, 
+      function(x) mean(x, na.rm=TRUE))
+
 plt_indices <- sample(1:length(e), 30)
 shrinkage_plot(e[plt_indices], e_d[plt_indices])
-par(mfrow=c(1, 2))
+par(mfrow=c(2, 1))
 hist(e, xlim=c(0, 1), col="grey")
 hist(e_d, xlim=c(0, 1), col="grey")
 ```
