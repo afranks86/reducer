@@ -7,8 +7,9 @@ source("utilities.R")
 
 ## w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
 ## w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
+eigen_debug <- FALSE
 w2_scale_vec <- c(seq(1, -1, by=-.1))
-iters <- 100
+iters <- 20
 
 true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
 results_array <- array(dim=c(iters, 5, length(w2_scale_vec)))
@@ -57,14 +58,23 @@ for(iter  in 1:iters) {
     alpha_hat_norm <- sqrt(sum(alpha_hat^2))
     alpha_hat_normalized <- alpha_hat / alpha_hat_norm
 
-    ab_dot_prod <- as.numeric(abs(t(alpha_hat_normalized) %*% beta))
+    ab_dot_prod <- as.numeric(t(alpha_hat_normalized) %*% beta)
+    
+    if(eigen_debug){
+      ab_outer <- alpha_hat_normalized %*% t(beta)
+      spec <- eigen(0.5 * (ab_outer + t(ab_outer)))
+      debug_mvals <- spec$values[c(1,p)]
+      debug_mvecs <- spec$vectors[,c(1,p)]
+    }
 
     mvecs <- cbind((alpha_hat_normalized + beta)/sqrt(2 + 2 * ab_dot_prod),
     (alpha_hat_normalized - beta)/sqrt(2 - 2 * ab_dot_prod))
     mvals <- c((ab_dot_prod + 1)/2, (ab_dot_prod - 1)/2)
-    
-    if(abs(mvals[2]) > mvals[1]) {
-        mvals <- -mvals[2:1]
+   
+    # Depending on correlation between alpha and beta, switch eigenspace labels to
+    # traverse the "closed" side of the hyperbola as we vary the w2 parameter
+    if(ab_dot_prod < 0){
+        mvals <- mvals[2:1]
         mvecs <- mvecs[, 2:1]
     }
 
@@ -73,23 +83,22 @@ for(iter  in 1:iters) {
         
         print(paste(w2scale, iter, sep=", "))
 
-        
-        w2_lim <- -sqrt((1-ab_dot_prod)/2)
+        # w2 limits are determined by the eigenvalue corresponding to the "closed"
+        # side of the hyperbola.
+        # at w2 = w2_lim, d(X) = e(X); at w2 = -w2_lim, d(X) = mhat(X)
+        w2_lim <- -sqrt(abs(mvecs[2]))
         w2 <- w2scale * w2_lim
 
         residual <- Y - X %*% alpha_hat - T * tau_hat
         
         ## Standard IPW with known true e
         ate_ipw <- ipw_est(e, T, Y, hajek=TRUE)
-        #ate_ipw_manual <- sum(1 / e[T==1] * Y[T==1]) / sum(1 / e[T==1]) -  sum(1 / (1-e[T==0]) * Y[T==0]) / sum(1 / (1-e[T==0]))
-        ate_ipw_manual <- mean(1 / e * Y * (T ==1) - 1 / (1 - e) * Y * (T==0))
-        print(c(ate_ipw, ate_ipw_manual))
         
         ## Compute IPW_d, using reduced d 
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
         bias <- get_bias(T=T, Y=Y, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50)
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50, DEBUG=FALSE)
 
         ate_ipw_d <- bias$bias1 - bias$bias0
 
@@ -102,7 +111,7 @@ for(iter  in 1:iters) {
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
         bias <- get_bias(T=T, Y=residual, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50)
+                         ab_dot_prod=ab_dot_prod, w2=w2, w2lim=w2_lim, times=50, DEBUG=FALSE)
 
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1

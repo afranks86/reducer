@@ -7,7 +7,7 @@ shrinkage_plot <- function(a, b) {
     abline(h=0)
 }
 
-get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=10) {
+get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=10, DEBUG=FALSE) {
     
     N <- NullC(mvecs)
 
@@ -17,11 +17,31 @@ get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=
                                         #biases <- rep(NA, times)
 
     for(i in 1:times) {
-        
-        g <- w1*mvecs[, 1] + w2 * mvecs[, 2] + sqrt(max(1-w1^2 - w2^2, 0)) * N %*% rustiefel(p-2, 1)
+        # Stop if magnitudes of w1 and w2 are too large, and likely not due to numerical error.
+        # Inserted so that max statement in next line does not silence bugs.
+        stopifnot(1 - w1^2 - w2^2 > -1e-6)
+        g <- w1 * mvecs[, 1] + w2 * mvecs[, 2] + sqrt(max(1 - w1^2 - w2^2, 0)) * N %*% rustiefel(p-2, 1)
         d <- Re(X %*% g)
+        
+        if(DEBUG){
+          mhatX <- X %*% alpha_hat_normalized
+          eX <- X %*% beta
+          
+          print(sprintf("Partial correlation: %s", round(cor(lm(mhatX ~ d)$resid, lm(eX ~ d)$resid), 4)))
+          
+          print(sprintf("Hyperbola condition: %s",
+                        round((alpha_hat_normalized %*% as.vector(g)) *
+                                (as.vector(g) %*% beta) - (alpha_hat_normalized %*% beta), 4)))
+          
+          if(w2 == 0)
+            print(sprintf("Checking that w2 = 0 correspond to bisector: %s",
+                          round(sum(alpha_hat_normalized %*% as.vector(g) - beta %*% as.vector(g)), 4)))
+        }
 
         c1 <- as.numeric(t(xb/sqrt(sum(xb^2))) %*% d/sqrt(sum(d^2)))
+        # Stop if magnitude of c1 is too large, and likely not due to numerical error.
+        # Inserted so that max statement in next line does not silence bugs.
+        stopifnot(1 - c1^2 > -1e-6)
         c2 <- sqrt(max(1-c1^2, 0))
 
         e_d <- sapply(d, function(di) {
