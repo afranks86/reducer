@@ -264,10 +264,19 @@ If $\alpha$ and $\beta$ are not colinear then $M$ is rank 2 with exactly one pos
 $$\gamma'U\Lambda U\gamma = \alpha'\beta$$
 where $U\Lambda U'$ is the eigendecomposition of M.  Specifically, U is  $p \times 2$ matrix of eigenvectors for the 2 non-zero eigenvalues (first is positive eval and second is negative eval).
 
-Then we have a solution characterized by the hyperbola
+Then we have a solution characterized by the $p-2$--dimensional hyperbola
+
 
 $$ \frac{\lambda_1}{\alpha'\beta}w_1 - \frac{\lambda_2}{\alpha'\beta}w_2 = 1$$
-for $w_i = \gamma'u_i$ and $\lambda_2$ is the absolute value of the negative eigenvalue in $\Lambda$.  A couple things to note:
+for $w_i = \gamma'u_i$ and $\lambda_2$ is the absolute value of the negative eigenvalue in $\Lambda$.
+
+Written a little bit more explicitly:
+$$
+ \gamma'(\lambda_1 u_1 - \lambda_2 u_2) = \alpha'\beta
+$$
+Note that this constrains two specific projections of $\gamma$, but leaves all other dimensions free.
+
+A couple things to note:
 
 
 - $w_2 = 0$ corresponds to a solution in which $\gamma$ is equiangular with $\alpha$ and $\beta$. Such solutions can be found as $\sqrt{\frac{\alpha'\beta}{\lambda_1}}u_1 + \sqrt{(1-\frac{\alpha'\beta}{\lambda_1})}z \text{ for all } z \in Null(U)$
