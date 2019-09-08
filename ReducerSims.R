@@ -10,19 +10,24 @@ argv <- commandArgs(trailingOnly=TRUE, asValues=TRUE)
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
 Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 115))
+Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 0))
 
 EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", FALSE))
 PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 115))
+T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 0))
 
 mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
 escale <- as.numeric(get_attr_default(argv, "escale", 3))
 
-times <- as.numeric(get_attr_default(argv, "times", 10))
+times <- as.numeric(get_attr_default(argv, "times", 50))
 iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 n <- as.numeric(get_attr_default(argv, "n", 1000))
 p <- as.numeric(get_attr_default(argv, "p", 1000))
+
+use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
+get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
 
 print(sprintf("Using mscale: %s", mscale))
 print(sprintf("Using escale: %s", escale))
@@ -153,7 +158,6 @@ for(iter  in 1:iters) {
                          ab_dot_prod=ab_dot_prod, escale=escale_hat,
                          w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
                          alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
-
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
         mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
