@@ -17,6 +17,7 @@ PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 115))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
+coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 15))
 escale <- as.numeric(get_attr_default(argv, "escale", 3))
 
@@ -28,6 +29,7 @@ p <- as.numeric(get_attr_default(argv, "p", 1000))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
+
 
 print(sprintf("Using mscale: %s", mscale))
 print(sprintf("Using escale: %s", escale))
@@ -55,8 +57,13 @@ for(iter  in 1:iters) {
     ## Generate dataset
     ## #################
     
-    alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
-    beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+    if(coef_setting == 1){
+        alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+        beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+    } else {
+        alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+        beta <- c(-1, 0.75, 1, rep(0, p-3))/sqrt(3)
+    }
     cor(alpha, beta)
     
     true_ate <- tau <- 5
@@ -205,12 +212,12 @@ for(iter  in 1:iters) {
     #                  today()))
 }
 
-dimnames(results_array) <- list(1:iters, c("Regression", "IPW", "IPW_d", "AIPW", "AIPW_d"), w2_scale_vec)
+dimnames(results_array) <- list(1:iters, c("Regression", "IPW", "IPW_d", "AIPW", "AIPW_d", "Naive"), w2_scale_vec)
 sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
 save(results_array, true_ate,
-     file=sprintf("results/results_n%i_p%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
-                  n, p, escale, mscale, Y_ALPHA, EST_PROPENSITY,
-                  today()))
+     file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
+                  n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY,
+                  now()))
