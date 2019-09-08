@@ -10,12 +10,12 @@ argv <- commandArgs(trailingOnly=TRUE, asValues=TRUE)
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
 Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 115))
-Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 0))
+Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 1))
 
 EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", FALSE))
 PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 115))
-T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 0))
+T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
 mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
 escale <- as.numeric(get_attr_default(argv, "escale", 3))
@@ -79,7 +79,8 @@ for(iter  in 1:iters) {
     ## #################
     
     
-    out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, cv=OUTCOME_CV, Y_lambda_min=Y_LAMBDA) else list()
+    out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, cv=OUTCOME_CV, Y_lambda_min=Y_LAMBDA, alpha=Y_ALPHA)
+                else list()
    
     alpha_hat <- get_attr_default(out_ests, "alpha_hat", alpha)
     alpha_hat_normalized <- get_attr_default(out_ests, "alpha_hat_normalized",
@@ -88,7 +89,8 @@ for(iter  in 1:iters) {
     mhat1 <- get_attr_default(out_ests, "mhat1", X %*% alpha + tau)
     tau_hat <- get_attr_default(out_ests, "tau_hat", tau)
     
-    prop_ests <- if(EST_PROPENSITY) estimate_propensity(X, T, cv=PROP_CV, T_lambda_min=T_LAMBDA) else list()
+    prop_ests <- if(EST_PROPENSITY) estimate_propensity(X, T, cv=PROP_CV, T_lambda_min=T_LAMBDA, alpha=T_ALPHA)
+                 else list()
     
     beta_hat <- get_attr_default(prop_ests, "beta_hat", beta * escale)
     beta_hat_normalized <- get_attr_default(prop_ests, "beta_hat_normalized", beta)

@@ -21,15 +21,15 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale){
     list(X=X, T=T, Y=Y, m=m, xb=xb, e=e)
 }
 
-estimate_outcome <- function(X, T, Y, cv=TRUE, Y_lambda_min=115){
+estimate_outcome <- function(X, T, Y, cv=TRUE, Y_lambda_min=115, alpha=0){
     if(cv){
         cvglm <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
-                           alpha=0, penalty.factor = c(0, 0, rep(1, p)), intercept=FALSE)
+                           alpha=alpha, penalty.factor = c(0, 0, rep(1, p)), intercept=FALSE)
         Y_lambda_min <- cvglm$lambda.min
     }
     
     outcome_fit <- glmnet(cbind(T, X), Y, family="gaussian", 
-                       alpha=0, penalty.factor = c(0, rep(1, p)), intercept=FALSE, 
+                       alpha=alpha, penalty.factor = c(0, rep(1, p)), intercept=FALSE, 
                        lambda=Y_lambda_min)
     alpha_hat <- coef(outcome_fit)[-c(1,2)]
     alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
@@ -44,25 +44,25 @@ estimate_outcome <- function(X, T, Y, cv=TRUE, Y_lambda_min=115){
          mhat1=mhat1)
 }
 
-estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115){ 
+estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115, alpha=0){ 
     if(cv){
         cvglm <- cv.glmnet(cbind(X), T, family="binomial", 
-                           alpha=0, penalty.factor = rep(1, p),intercept=FALSE)
+                           alpha=alpha, penalty.factor = rep(1, p),intercept=FALSE)
         T_lambda_min <- cvglm$lambda.min
     }
     
     propensity_fit <- glmnet(cbind(X), T, family="binomial", 
-                          alpha=0, penalty.factor = rep(1, p),intercept=FALSE, 
+                          alpha=alpha, penalty.factor = rep(1, p),intercept=FALSE, 
                           lambda=T_lambda_min)
     beta_hat <- coef(propensity_fit)[-1]
     escale_hat <- sqrt(sum(beta_hat^2))
     beta_hat_normalized <- beta_hat / escale_hat
     ehat <- predict(propensity_fit, type="response", newx=X)
     
-     list(beta_hat=beta_hat,
-          beta_hat_normalized=beta_hat_normalized,
-          escale_hat=escale_hat,
-          ehat=ehat)
+    list(beta_hat=beta_hat,
+         beta_hat_normalized=beta_hat_normalized,
+         escale_hat=escale_hat,
+         ehat=ehat)
 }
 
 # Grabs named attribute from list if not na; else returns default
