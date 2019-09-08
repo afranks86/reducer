@@ -220,4 +220,4 @@ apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 save(results_array, true_ate,
      file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
                   n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY,
-                  now()))
+                  gsub(" ", "", now(), fixed=TRUE)))
