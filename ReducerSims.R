@@ -16,6 +16,7 @@ iters <- 20
 true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
 results_array <- array(dim=c(iters, 5, length(w2_scale_vec)))
 
+
 for(iter  in 1:iters) {
 
     ## ################
@@ -25,59 +26,74 @@ for(iter  in 1:iters) {
     n = 1000
     p = 1000
     
-    alpha <- rustiefel(p, 1) 
-    beta <- rustiefel(p, 1) 
-    
+    #alpha <- rustiefel(p, 1) 
+    #beta <- rustiefel(p, 1) 
     alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
     beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
     cor(alpha, beta)
     
-    ## X <- rmvnorm(n, rep(0, p), diag(1, p))
-    X <- matrix(rnorm(n * p), nrow=n, ncol=p)
-    mscale <- -15
-    
-    m <- mscale * X %*% alpha
-    xb <- X %*% beta 
+    mscale <- 5
     escale <- 3
     
-    e <- exp(escale*xb)/(1 + exp(escale*xb))
-
-    tau = 5
-    T <- rbinom(n, 1, e)
-    Y <- m +  tau * T + rnorm(n, 0, 1)
+    simdat <- gen_linearY_logisticT(n, p, alpha, beta, mscale, escale)
+    
+    X <- simdat$X
+    T <- simdat$T
+    Y <- simdat$Y
+    m <- simdat$m
+    e <- simdat$e
     
     true_ate <- tau
-    Y_lambda_min <- 115
-    glm_coefs <- coef(glmnet(cbind(T, X), Y, family="gaussian", 
-                             alpha=0, penalty.factor = c(0, rep(1, p)),intercept=FALSE, 
-                             lambda=Y_lambda_min))
     
-    ehat <- predict(glmnet(X, T, family="binomial", alpha=0), newx=X, type="response")
-
-    alpha_hat <- glm_coefs[-c(1:2)]
-    tau_hat <- glm_coefs[2]    
+    ## ################
+    ## Set nuisance parameters
+    ## #################
     
-    alpha_hat_norm <- sqrt(sum(alpha_hat^2))
-    alpha_hat_normalized <- alpha_hat / alpha_hat_norm
-
-    ab_dot_prod <- as.numeric(t(alpha_hat_normalized) %*% beta)
+    EST_OUTCOME = TRUE
+    OUTCOME_CV = FALSE
+    Y_LAMBDA = 115
+    EST_PROPENSITY = FALSE
+    PROP_CV = TRUE
+    T_LAMBDA = 115
+    
+    out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, cv=OUTCOME_CV, Y_lambda_min=Y_LAMBDA) else list()
+   
+    alpha_hat <- get_attr_default(out_ests, "alpha_hat", alpha)
+    alpha_hat_normalized <- get_attr_default(out_ests, "alpha_hat_normalized",
+                                             alpha / sqrt(sum(alpha^2)))
+    mhat0 <- get_attr_default(out_ests, "mhat0", X %*% alpha)
+    mhat1 <- get_attr_default(out_ests, "mhat1", X %*% alpha + tau)
+    tau_hat <- get_attr_default(out_ests, "tau_hat", tau)
+    
+    prop_ests <- if(EST_PROPENSITY) estimate_propensity(X, T, cv=PROP_CV, T_lambda_min=T_LAMBDA) else list()
+    
+    beta_hat <- get_attr_default(prop_ests, "beta_hat", beta * escale)
+    beta_hat_normalized <- get_attr_default(prop_ests, "beta_hat_normalized", beta)
+    escale_hat <- get_attr_default(prop_ests, "escale_hat", escale)
+    ehat <- get_attr_default(prop_ests, "ehat", e)
+    xb <- X %*% beta_hat_normalized
+   
+    ## ################
+    ## Compute hyperbola
+    ## #################
+    
+    ab_dot_prod <- as.numeric(t(alpha_hat_normalized) %*% beta_hat_normalized)
+    mvecs <- cbind((alpha_hat_normalized + beta_hat_normalized)/sqrt(2 + 2 * ab_dot_prod),
+                   (alpha_hat_normalized - beta_hat_normalized)/sqrt(2 - 2 * ab_dot_prod))
+    mvals <- c((ab_dot_prod + 1)/2, (ab_dot_prod - 1)/2)
     
     if(eigen_debug){
-      ab_outer <- alpha_hat_normalized %*% t(beta)
-      spec <- eigen(0.5 * (ab_outer + t(ab_outer)))
-      debug_mvals <- spec$values[c(1,p)]
-      debug_mvecs <- spec$vectors[,c(1,p)]
+        ab_outer <- alpha_hat_normalized %*% t(beta_hat_normalized)
+        spec <- eigen(0.5 * (ab_outer + t(ab_outer)))
+        debug_mvals <- spec$values[c(1,p)]
+        debug_mvecs <- spec$vectors[,c(1,p)]
     }
-
-    mvecs <- cbind((alpha_hat_normalized + beta)/sqrt(2 + 2 * ab_dot_prod),
-    (alpha_hat_normalized - beta)/sqrt(2 - 2 * ab_dot_prod))
-    mvals <- c((ab_dot_prod + 1)/2, (ab_dot_prod - 1)/2)
    
     # Depending on correlation between alpha and beta, switch eigenspace labels to
     # traverse the "closed" side of the hyperbola as we vary the w2 parameter
     if(ab_dot_prod < 0){
         mvals <- mvals[2:1]
-        mvecs <- mvecs[, 2:1]
+        mvecs <- mvecs[,2:1]
     }
 
     for(j in 1:length(w2_scale_vec)) {
@@ -93,15 +109,16 @@ for(iter  in 1:iters) {
 
         residual <- Y - X %*% alpha_hat - T * tau_hat
         
-        ## Standard IPW with known true e
-        ate_ipw <- ipw_est(e, T, Y, hajek=TRUE)
+        ## Standard IPW
+        ate_ipw <- ipw_est(ehat, T, Y, hajek=TRUE)
         
         ## Compute IPW_d, using reduced d 
-        ## w2 is the tuning parameter for how similar to e vs mhat,
+        ## w2 is the tuning parameter for how similar d is to to ehat vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
         bias <- get_bias(T=T, Y=Y, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, escale=escale,
-                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
+                         ab_dot_prod=ab_dot_prod, escale=escale_hat,
+                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
+                         alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
 
         ate_ipw_d <- bias$bias1 - bias$bias0
 
@@ -109,14 +126,15 @@ for(iter  in 1:iters) {
         #mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(1 / e[T==1] * residual[T==1]) / sum(1 / e[T==1])
         #mu_ctrl <- mean(X %*% alpha_hat) + sum(1/ (1-e[T==0]) * residual[T==0]) / sum(1 / (1-e[T==0]))
         #ate_aipw <- mu_treat - mu_ctrl
-        ate_aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) + ipw_est(e, T, residual, hajek=TRUE)
+        ate_aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) + ipw_est(ehat, T, residual, hajek=TRUE)
         
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
         bias <- get_bias(T=T, Y=residual, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, escale=escale,
-                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug)
+                         ab_dot_prod=ab_dot_prod, escale=escale_hat,
+                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
+                         alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
 
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1

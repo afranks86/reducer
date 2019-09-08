@@ -7,7 +7,73 @@ shrinkage_plot <- function(a, b) {
     abline(h=0)
 }
 
-get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10, DEBUG=FALSE) {
+gen_linearY_logisticT <- function(n, p, alpha, beta, mscale, escale){
+    X <- matrix(rnorm(n * p), nrow=n, ncol=p)
+    
+    m <- mscale * X %*% alpha
+    xb <- X %*% beta 
+    
+    e <- logistic(escale * xb)
+
+    tau = 5
+    T <- rbinom(n, 1, e)
+    Y <- m +  tau * T + rnorm(n, 0, 1)
+    
+    list(X=X, T=T, Y=Y, m=m, xb=xb, e=e)
+}
+
+estimate_outcome <- function(X, T, Y, cv=TRUE, Y_lambda_min=115){
+    if(cv){
+        cvglm <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
+                           alpha=0, penalty.factor = c(0, 0, rep(1, p)), intercept=FALSE)
+        Y_lambda_min <- cvglm$lambda.min
+    }
+    
+    outcome_fit <- glmnet(cbind(T, X), Y, family="gaussian", 
+                       alpha=0, penalty.factor = c(0, rep(1, p)), intercept=FALSE, 
+                       lambda=Y_lambda_min)
+    alpha_hat <- coef(outcome_fit)[-c(1,2)]
+    alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
+    tau_hat <- coef(outcome_fit)[2]
+    mhat0 <- predict(outcome_fit, cbind(0, X))
+    mhat1 <- predict(outcome_fit, cbind(1, X))
+    
+    list(alpha_hat=alpha_hat,
+         alpha_hat_normalized=alpha_hat_normalized,
+         tau_hat=tau_hat,
+         mhat0=mhat0,
+         mhat1=mhat1)
+}
+
+estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115){ 
+    if(cv){
+        cvglm <- cv.glmnet(cbind(X), T, family="binomial", 
+                           alpha=0, penalty.factor = rep(1, p),intercept=FALSE)
+        T_lambda_min <- cvglm$lambda.min
+    }
+    
+    propensity_fit <- glmnet(cbind(X), T, family="binomial", 
+                          alpha=0, penalty.factor = rep(1, p),intercept=FALSE, 
+                          lambda=T_lambda_min)
+    beta_hat <- coef(propensity_fit)[-1]
+    escale_hat <- sqrt(sum(beta_hat^2))
+    beta_hat_normalized <- beta_hat / escale_hat
+    ehat <- predict(propensity_fit, type="response", newx=X)
+    
+     list(beta_hat=beta_hat,
+          beta_hat_normalized=beta_hat_normalized,
+          escale_hat=escale_hat,
+          ehat=ehat)
+}
+
+# Grabs named attribute from list if not na; else returns default
+get_attr_default <- function(thelist, attrname, default){
+    if(!is.null(thelist[[attrname]])) thelist[[attrname]] else default
+}
+
+
+get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10,
+                     DEBUG=FALSE, alpha_hat_normalized=NA, beta_hat_normalized=NA) {
     
     N <- NullC(mvecs)
 
@@ -24,24 +90,29 @@ get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim
         d <- Re(X %*% g)
         
         if(DEBUG){
-          mhatX <- X %*% alpha_hat_normalized
-          eX <- X %*% beta
-          
-          print(sprintf("Partial correlation: %s", round(cor(lm(mhatX ~ d)$resid, lm(eX ~ d)$resid), 4)))
-          
-          print(sprintf("Hyperbola condition: %s",
-                        round((alpha_hat_normalized %*% as.vector(g)) *
-                                (as.vector(g) %*% beta) - (alpha_hat_normalized %*% beta), 4)))
-         
-          if(w2 == -sqrt(abs(mvals[2])))
-            print(sprintf("Checking that w2 = min corresponds to e(X): %s",
-                          round(cor(g, beta), 4)))
-          if(w2 == sqrt(abs(mvals[2])))
-            print(sprintf("Checking that w2 = max corresponds to mhat(X): %s",
-                          round(cor(g, alpha_hat_normalized), 4)))
-          if(w2 == 0)
-            print(sprintf("Checking that w2 = 0 correspond to bisector: %s",
-                          round(sum(alpha_hat_normalized %*% as.vector(g) - beta %*% as.vector(g)), 4)))
+            if(is.na(alpha_hat_normalized) || is.na(beta_hat_normalized))
+                stop("Debug requires alpha_hat_normalized and beta_hat_normalized vectors.")
+            mhatX <- X %*% alpha_hat_normalized
+            eX <- X %*% beta_hat_normalized
+            
+            print(sprintf("Partial correlation: %s",
+                          round(cor(lm(mhatX ~ d)$resid, lm(eX ~ d)$resid), 4)))
+            
+            print(sprintf("Hyperbola condition: %s",
+                          round((alpha_hat_normalized %*% as.vector(g)) *
+                                  (as.vector(g) %*% beta_hat_normalized) -
+                                    (alpha_hat_normalized %*% beta_hat_normalized), 4)))
+           
+            if(w2 == -sqrt(abs(mvals[2])))
+              print(sprintf("Checking that w2 = min corresponds to e(X): %s",
+                            round(cor(g, beta_hat_normalized), 4)))
+            if(w2 == sqrt(abs(mvals[2])))
+              print(sprintf("Checking that w2 = max corresponds to mhat(X): %s",
+                            round(cor(g, alpha_hat_normalized), 4)))
+            if(w2 == 0)
+              print(sprintf("Checking that w2 = 0 correspond to bisector: %s",
+                            round(sum(alpha_hat_normalized %*% as.vector(g) -
+                                          beta_hat_normalized %*% as.vector(g)), 4)))
         }
 
         c1 <- as.numeric(t(xb/sqrt(sum(xb^2))) %*% d/sqrt(sum(d^2)))
@@ -72,6 +143,10 @@ get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim
 
 invlogit <- function(x, a, b) {
     exp(a+x*b) / (1+exp(a+x*b))
+}
+
+logistic <- function(x){
+    1 / (1 + exp(-x))
 }
 
 ipw_est <- function(e, T, Y, hajek=FALSE){
