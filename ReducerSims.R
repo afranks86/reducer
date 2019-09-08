@@ -2,16 +2,43 @@ library(mvtnorm)
 library(rstiefel)
 library(glmnet)
 library(lubridate)
+library(R.utils)
 source("utilities.R")
+
+argv <- commandArgs(trailingOnly=TRUE, asValues=TRUE)
+
+EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
+OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
+Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 115))
+
+EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", FALSE))
+PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
+T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 115))
+
+mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
+escale <- as.numeric(get_attr_default(argv, "escale", 3))
+
+times <- as.numeric(get_attr_default(argv, "times", 10))
+iters <- as.numeric(get_attr_default(argv, "iters", 50))
+
+n <- as.numeric(get_attr_default(argv, "n", 1000))
+p <- as.numeric(get_attr_default(argv, "p", 1000))
+
+print(sprintf("Using mscale: %s", mscale))
+print(sprintf("Using escale: %s", escale))
+print(sprintf("Sample size (n): %s", n))
+print(sprintf("Dimension (p): %s", p))
+print(sprintf("Running for %s iters", iters))
+print(sprintf("Drawing %s null space vectors", times))
+print(sprintf("Estimating propensity? %s", EST_PROPENSITY))
 
 ## w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
 ## w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
 eigen_debug <- FALSE
 bias_debug <- FALSE
-bias_times <- if(bias_debug) 1 else 50
+bias_times <- if(bias_debug) 1 else times
 
 w2_scale_vec <- c(seq(1, -1, by=-.1))
-iters <- 20
 
 true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
 results_array <- array(dim=c(iters, 5, length(w2_scale_vec)))
@@ -23,8 +50,8 @@ for(iter  in 1:iters) {
     ## Generate dataset
     ## #################
     
-    n = 1000
-    p = 1000
+    #n = 1000
+    #p = 1000
     
     #alpha <- rustiefel(p, 1) 
     #beta <- rustiefel(p, 1) 
@@ -32,10 +59,9 @@ for(iter  in 1:iters) {
     beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
     cor(alpha, beta)
     
-    mscale <- 5
-    escale <- 3
+    true_ate <- tau <- 5
     
-    simdat <- gen_linearY_logisticT(n, p, alpha, beta, mscale, escale)
+    simdat <- gen_linearY_logisticT(n, p, tau, alpha, beta, mscale, escale)
     
     X <- simdat$X
     T <- simdat$T
@@ -43,18 +69,10 @@ for(iter  in 1:iters) {
     m <- simdat$m
     e <- simdat$e
     
-    true_ate <- tau
-    
     ## ################
     ## Set nuisance parameters
     ## #################
     
-    EST_OUTCOME = TRUE
-    OUTCOME_CV = FALSE
-    Y_LAMBDA = 115
-    EST_PROPENSITY = FALSE
-    PROP_CV = TRUE
-    T_LAMBDA = 115
     
     out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, cv=OUTCOME_CV, Y_lambda_min=Y_LAMBDA) else list()
    

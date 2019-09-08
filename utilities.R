@@ -7,7 +7,7 @@ shrinkage_plot <- function(a, b) {
     abline(h=0)
 }
 
-gen_linearY_logisticT <- function(n, p, alpha, beta, mscale, escale){
+gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale){
     X <- matrix(rnorm(n * p), nrow=n, ncol=p)
     
     m <- mscale * X %*% alpha
@@ -15,7 +15,6 @@ gen_linearY_logisticT <- function(n, p, alpha, beta, mscale, escale){
     
     e <- logistic(escale * xb)
 
-    tau = 5
     T <- rbinom(n, 1, e)
     Y <- m +  tau * T + rnorm(n, 0, 1)
     
