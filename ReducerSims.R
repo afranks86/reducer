@@ -5,7 +5,7 @@ library(lubridate)
 library(R.utils)
 source("utilities.R")
 
-argv <- commandArgs(trailingOnly=TRUE, asValues=TRUE)
+argv <- R.utils::commandArgs(trailingOnly=TRUE, asValues=TRUE)
 
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
