@@ -7,7 +7,7 @@ shrinkage_plot <- function(a, b) {
     abline(h=0)
 }
 
-get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, w2=0, w2lim, times=10, DEBUG=FALSE) {
+get_bias <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10, DEBUG=FALSE) {
     
     N <- NullC(mvecs)
 
