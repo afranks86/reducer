@@ -21,7 +21,7 @@ script_fstring <- paste(RSCRIPT_ALIAS, "ReducerSims.R", option_fstring, sprintf(
 
 logfile_fstring <- "logs/log_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.log"
 
-retcodes <- mclapply(c(1,2),
+retcodes <- mclapply(1:nrow(all_settings),
          function(i){
              n <- all_settings[i,1][[1]][1]
              p <- all_settings[i,1][[1]][2]
@@ -31,9 +31,9 @@ retcodes <- mclapply(c(1,2),
              aa <- all_settings[i,5]
              est <- all_settings[i,6]
              
-             call <- sprintf(script_fstring, aspects[1], aspects[2], cc, ee, mm, aa, est)
+             call <- sprintf(script_fstring, n, p, cc, ee, mm, aa, est)
              print(call)
-             logfile <- sprintf(logfile_fstring, aspects[1], aspects[2], cc, ee, mm, aa, est,
+             logfile <- sprintf(logfile_fstring, n, p, cc, ee, mm, aa, est,
                                 gsub(" ", "", now(), fixed=TRUE))
              system(paste(call, ">", logfile, "2>&1"))
          }, mc.cores=detectCores())
