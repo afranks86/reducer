@@ -17,7 +17,7 @@ PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 115))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
-mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 15))
 escale <- as.numeric(get_attr_default(argv, "escale", 3))
 
 times <- as.numeric(get_attr_default(argv, "times", 50))
@@ -45,8 +45,8 @@ bias_times <- if(bias_debug) 1 else times
 
 w2_scale_vec <- c(seq(1, -1, by=-.1))
 
-true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- numeric(iters)
-results_array <- array(dim=c(iters, 5, length(w2_scale_vec)))
+true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- naive_vec <- numeric(iters)
+results_array <- array(dim=c(iters, 6, length(w2_scale_vec)))
 
 
 for(iter  in 1:iters) {
@@ -55,11 +55,6 @@ for(iter  in 1:iters) {
     ## Generate dataset
     ## #################
     
-    #n = 1000
-    #p = 1000
-    
-    #alpha <- rustiefel(p, 1) 
-    #beta <- rustiefel(p, 1) 
     alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
     beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
     cor(alpha, beta)
@@ -77,7 +72,6 @@ for(iter  in 1:iters) {
     ## ################
     ## Set nuisance parameters
     ## #################
-    
     
     out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, cv=OUTCOME_CV, Y_lambda_min=Y_LAMBDA, alpha=Y_ALPHA)
                 else list()
@@ -134,6 +128,9 @@ for(iter  in 1:iters) {
 
         residual <- Y - X %*% alpha_hat - T * tau_hat
         
+        ## Naive difference in means
+        ate_naive <- mean(Y[T == 1]) - mean(Y[T == 0])
+        
         ## Standard IPW
         ate_ipw <- ipw_est(ehat, T, Y, hajek=TRUE)
         
@@ -165,8 +162,8 @@ for(iter  in 1:iters) {
         mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
         ate_aipw_d <- mu_treat - mu_ctrl
 
-        print(sprintf("Reg: %.3f, IPW: %.3f, IPW-d: %.3f, AIPW: %.3f, AIPW-d: %.3f",
-                      tau_hat, ate_ipw, ate_ipw_d, ate_aipw, ate_aipw_d))
+        print(sprintf("Naive: %.3f, Reg: %.3f, IPW: %.3f, IPW-d: %.3f, AIPW: %.3f, AIPW-d: %.3f",
+                      ate_naive, tau_hat, ate_ipw, ate_ipw_d, ate_aipw, ate_aipw_d))
         
         true_ate_vec[iter] <- true_ate
         tau_hat_vec[iter] <- tau_hat
@@ -174,12 +171,14 @@ for(iter  in 1:iters) {
         ipw_d_vec[iter] <- ate_ipw_d
         aipw_vec[iter] <- ate_aipw
         aipw_d_vec[iter] <- ate_aipw_d
+        naive_vec[iter] <- ate_naive
 
         results_array[iter, 1, j] <- tau_hat
         results_array[iter, 2, j] <- ate_ipw
         results_array[iter, 3, j] <- ate_ipw_d
         results_array[iter, 4, j] <- ate_aipw
         results_array[iter, 5, j] <- ate_aipw_d
+        results_array[iter, 6, j] <- ate_naive
         
     }
 
@@ -199,11 +198,11 @@ for(iter  in 1:iters) {
     apply((sign(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec)+1)/2, 1, 
           function(x) mean(x, na.rm=TRUE))
 
-    save(results_array,
-         file=sprintf("results_negn%i_p%i_escale%.1f_wmax%.2f_wmin%.2f_%s.RData",
-                      n, p ,escale,
-                      max(w2_scale_vec), min(w2_scale_vec),
-                      today()))
+    #save(results_array,
+    #     file=sprintf("results_negn%i_p%i_escale%.1f_wmax%.2f_wmin%.2f_%s.RData",
+    #                  n, p ,escale,
+    #                  max(w2_scale_vec), min(w2_scale_vec),
+    #                  today()))
 }
 
 dimnames(results_array) <- list(1:iters, c("Regression", "IPW", "IPW_d", "AIPW", "AIPW_d"), w2_scale_vec)
@@ -211,53 +210,7 @@ sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE
 
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
-save(results_array,
-     file=sprintf("results_n%i_p%i_escale%.1f_wmax%.2f_wmin%.2f_%s.RData",
-                  n, p , escale,
-                  max(w2_scale_vec), min(w2_scale_vec),
+save(results_array, true_ate,
+     file=sprintf("results/results_n%i_p%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
+                  n, p, escale, mscale, Y_ALPHA, EST_PROPENSITY,
                   today()))
-
-library(tidyverse)
-library(ggridges)
-library(superheat)
-library(patchwork)
-as_tibble(results_array[, , "0.6"]) %>%
-    gather(key=Type, value=Estimate) %>%
-    ggplot() +
-    geom_density_ridges(aes(x=Estimate, y=Type, fill=Type), stat="binline") +
-    geom_vline(xintercept=5) + theme_bw()
-
-
-rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
-bias_mat <- apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE))
-var_mat <- rmse_mat^2 - bias_mat^2
-
-
-tib <- as_tibble(t(rmse_mat))
-tib$value <- as.numeric(colnames(rmse_mat))
-rmse_plot <- tib %>% gather(key=Type, value=RMSE, -value) %>%
-    ggplot() + geom_line(aes(x=value, y=RMSE, col=Type)) +
-    theme_bw() + theme(legend.position="none")
-
-tib <- as_tibble(t(bias_mat))
-tib$value <- as.numeric(colnames(bias_mat))
-bias_plot <- tib %>% gather(key=Type, value=Bias, -value) %>%
-    ggplot() + geom_line(aes(x=value, y=Bias, col=Type)) +
-    theme_bw() + theme(legend.position="none")
-
-tib <- as_tibble(t(var_mat))
-tib$value <- as.numeric(colnames(bias_mat))
-var_plot <- tib %>% gather(key=Type, value=Var, -value) %>%
-    ggplot() + geom_line(aes(x=value, y=Var, col=Type)) + theme_bw() 
-
-
-rmse_plot + bias_plot + var_plot
-
-cor(results_array[, "IPW_d",  ])
-superheat::superheat(cor(results_array[, "AIPW_d",  ]))
-
-cor(results_array[, ,  "0.9"])
-cor(results_array[, ,  "0.7"])
-
-
-
