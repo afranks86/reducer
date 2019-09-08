@@ -1,4 +1,3 @@
-library(balanceHD)
 library(mvtnorm)
 library(rstiefel)
 library(glmnet)
@@ -107,9 +106,10 @@ for(iter  in 1:iters) {
         ate_ipw_d <- bias$bias1 - bias$bias0
 
         ## Compute standard AIPW using known true e  
-        mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(1 / e[T==1] * residual[T==1]) / sum(1 / e[T==1])
-        mu_ctrl <- mean(X %*% alpha_hat) + sum(1/ (1-e[T==0]) * residual[T==0]) / sum(1 / (1-e[T==0]))
-        ate_aipw <- mu_treat - mu_ctrl
+        #mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(1 / e[T==1] * residual[T==1]) / sum(1 / e[T==1])
+        #mu_ctrl <- mean(X %*% alpha_hat) + sum(1/ (1-e[T==0]) * residual[T==0]) / sum(1 / (1-e[T==0]))
+        #ate_aipw <- mu_treat - mu_ctrl
+        ate_aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) + ipw_est(e, T, residual, hajek=TRUE)
         
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
