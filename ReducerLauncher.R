@@ -28,7 +28,7 @@ for(aspects in np){
                         print(call)
                         logfile <- sprintf(logfile_fstring, aspects[1], aspects[2], cc, ee, mm, aa, est,
                                            gsub(" ", "", now(), fixed=TRUE))
-                        system(paste(call, ">", "logfile", "2>&1"), wait=FALSE)
+                        system(paste(call, ">", logfile, "2>&1"), wait=FALSE)
                     }
                 }
             }
