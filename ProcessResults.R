@@ -78,6 +78,58 @@ for(i in 1:length(results_files)) {
     ggsave(filename=sprintf("figs/%s.pdf", plot_name), width=14)
 
 
-    ## Make MSE Tables
+
     
 }
+
+
+## Make MSE Tables
+library(xtable)
+table_indices <- sample(length(results_files), 20)
+rmse_table <- matrix(nrow=length(table_indices), ncol=8)
+table_rownames <- c()
+count <- 1
+
+for(i in table_indices) {
+
+    file_name <- results_files[i]
+    file_path <- paste0("results/", file_name)
+
+    print(file_name)
+
+    load(file_path)
+    params <- stringr::str_match(file_name,
+                                 "results_n(\\d+)_p(\\d+)_coef([0-9])+_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_estpropensity(TRUE|FALSE)")
+
+    n <- as.numeric(params[2])
+    p <- as.numeric(params[3])
+    coef <- as.numeric(params[4])
+    escale <- as.numeric(params[5])
+    mscale <- as.numeric(params[6])
+    yalpha <- as.numeric(params[7])
+    estimated_propensity <- as.logical(params[8])
+
+    rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
+
+    rmse_table[count, ] <- c(rmse_mat[c("Naive", "Regression", "IPW", "AIPW"), 1],
+                           rmse_mat[c("IPW_d", "AIPW_d"), "0"],
+                           rmse_mat[c("IPW_d", "AIPW_d"), "-1"])
+
+    table_rownames <-  c(table_rownames, sprintf("n=%i, p=%i, escale=%.2f", n, p ,escale))
+    count <- count + 1
+}    
+colnames(rmse_table) <- c("Naive", "Regression", "IPW", "AIPW", "IPW-d(0)", "AIPW-d(0)", "IPW-d(-1)", "AIPW-d(-1)")
+
+rmse_table <- apply(rmse_table, 1, function(x) {
+    x <- round(x, 2)
+    min_index <- which.min(x)
+    x[min_index] <- paste0("BOLD", x[min_index])
+    x
+}) %>% t
+
+bold.somerows <- function(x) gsub('BOLD(.*)',paste('\\\\textbf{\\1','}'),x)
+
+row.names(rmse_table) <- paste0(table_rownames, 1:length(table_indices))
+print.xtable(xtable(rmse_table),
+             sanitize.text.function=bold.somerows)
+
