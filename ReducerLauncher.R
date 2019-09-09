@@ -1,7 +1,7 @@
 library(lubridate)
-RSCRIPT_ALIAS <- "Rscript"
+RSCRIPT_ALIAS <- "/opt/R/3.5.3/bin/Rscript"
 
-iters <- 10
+iters <- 100
 
 np <- list(c(100, 100), c(200, 100), c(1000, 500), c(1000, 1000))
 coef_settings <- c(1, 2)
@@ -28,7 +28,7 @@ for(aspects in np){
                         print(call)
                         logfile <- sprintf(logfile_fstring, aspects[1], aspects[2], cc, ee, mm, aa, est,
                                            gsub(" ", "", now(), fixed=TRUE))
-                        system(paste(call, ">", "logfile", "2>&1"), wait=FALSE)
+                        system(paste(call, ">", logfile, "2>&1"), wait=FALSE)
                     }
                 }
             }
