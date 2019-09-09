@@ -17,6 +17,7 @@ PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 115))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
+tau <- as.numeric(get_attr_default(argv, "tau", 0))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 15))
 escale <- as.numeric(get_attr_default(argv, "escale", 3))
@@ -66,7 +67,7 @@ for(iter  in 1:iters) {
     }
     cor(alpha, beta)
     
-    true_ate <- tau <- 5
+    true_ate <- tau
     
     simdat <- gen_linearY_logisticT(n, p, tau, alpha, beta, mscale, escale)
     

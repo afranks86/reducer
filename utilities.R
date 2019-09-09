@@ -25,7 +25,7 @@ estimate_outcome <- function(X, T, Y, cv=TRUE, Y_lambda_min=115, alpha=0){
     if(cv){
         cvglm <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
                            alpha=alpha, penalty.factor = c(0, 0, rep(1, p)), intercept=FALSE)
-        Y_lambda_min <- cvglm$lambda.min
+        Y_lambda_min <- cvglm$lambda.1se
     }
     
     outcome_fit <- glmnet(cbind(T, X), Y, family="gaussian", 
@@ -48,7 +48,7 @@ estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115, alpha=0){
     if(cv){
         cvglm <- cv.glmnet(cbind(X), T, family="binomial", 
                            alpha=alpha, penalty.factor = rep(1, p),intercept=FALSE)
-        T_lambda_min <- cvglm$lambda.min
+        T_lambda_min <- cvglm$lambda.1se
     }
     
     propensity_fit <- glmnet(cbind(X), T, family="binomial", 
