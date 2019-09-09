@@ -2,16 +2,16 @@ library(lubridate)
 library(parallel)
 RSCRIPT_ALIAS <- "/opt/R/3.5.3/bin/Rscript"
 
-iters <- 10
+iters <- 100 
 
 np <- list(c(100, 100), c(200, 100), c(1000, 500), c(1000, 1000))
 coef_settings <- c(1, 2)
+escale <- c(1, 4)
 mscale <- c(-10, 5, 5, 10)
-escale <- c(1, 3)
 y_alpha <- c(0, 1)
 EST_PROPENSITY <- c(FALSE, TRUE)
 
-all_settings <- expand.grid(np, coef_settings, mscale, escale, y_alpha, EST_PROPENSITY)
+all_settings <- expand.grid(np, coef_settings, escale, mscale, y_alpha, EST_PROPENSITY)
 
 option_names <- c('n', 'p',   'coef', 'escale', 'mscale', 'y_alpha', 'est_propensity')
 option_types <- c('%i', '%i', '%i',   '%.1f',   '%.1f',   '%i',      '%s')
