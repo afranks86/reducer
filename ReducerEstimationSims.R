@@ -39,7 +39,7 @@ for(iter  in 1:iters) {
     
     m <- mscale * X %*% alpha
     xb <- X %*% beta 
-    escale <- 3
+    escale <- 1/2
     
     e <- exp(escale*xb)/(1 + exp(escale*xb))
 
@@ -50,23 +50,27 @@ for(iter  in 1:iters) {
     true_ate <- tau
 
 
-    cvglm <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
-                       alpha=0, penalty.factor = c(0, 0, rep(1, p)), intercept=FALSE)
-    Y_lambda_min <- cvglm$lambda.min
+    ## cvglm <- cv.glmnet(cbind(T, X), Y, family="gaussian", 
+    ##                    alpha=0, penalty.factor = c(0, 0, rep(1, p)), intercept=FALSE)
+    ## Y_lambda_min <- cvglm$lambda.min
+    Y_lambda_min <- 1
 
     
     glm_coefs <- coef(glmnet(cbind(T, X), Y, family="gaussian", 
                              alpha=0, penalty.factor = c(0, rep(1, p)),intercept=FALSE, 
                              lambda=Y_lambda_min))
 
-    cvglm <- cv.glmnet(cbind(X), T, family="binomial", 
-                    alpha=0, penalty.factor = rep(1, p),intercept=FALSE)
-    T_lambda_min <- cvglm$lambda.min
+    ## cvglm <- cv.glmnet(cbind(X), T, family="binomial", 
+    ##                    alpha=0, penalty.factor = rep(1, p),intercept=FALSE)
+    ## T_lambda_min <- cvglm$lambda.min
 
+   T_lambda_min <- 0.001
     T_glm_coefs <- coef(glmnet(cbind(X), T, family="binomial", 
                                alpha=0, penalty.factor = rep(1, p),intercept=FALSE, 
                                lambda=T_lambda_min))[-1]
 
+    
+    
     ehat = predict(glmnet(cbind(X), T, family="binomial", 
                           alpha=0, penalty.factor = rep(1, p),intercept=FALSE, 
                           lambda=T_lambda_min), type="response", newx=X)
@@ -228,14 +232,16 @@ tib$value <- as.numeric(colnames(bias_mat))
 var_plot <- tib %>% gather(key=Type, value=Var, -value) %>%
     ggplot() + geom_line(aes(x=value, y=Var, col=Type)) + theme_bw() 
 
-
-rmse_plot + bias_plot + var_plot
-
 cor(results_array[, "IPW_d",  ])
 superheat::superheat(cor(results_array[, "AIPW_d",  ]))
 
 cor(results_array[, ,  "0.9"])
 cor(results_array[, ,  "0.7"])
+
+### PLOT
+rmse_plot + bias_plot + var_plot
+
+
 
 
 
