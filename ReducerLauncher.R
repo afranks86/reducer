@@ -4,10 +4,17 @@ RSCRIPT_ALIAS <- "/opt/R/3.5.3/bin/Rscript"
 
 iters <- 100 
 
-np <- list(c(100, 100), c(200, 100), c(1000, 500), c(1000, 1000))
+#np <- list(c(100, 100), c(200, 100), c(1000, 500), c(1000, 1000))
+#coef_settings <- c(1, 2)
+#escale <- c(1, 4)
+#mscale <- c(-10, 5, 5, 10)
+#y_alpha <- c(0, 1)
+#EST_PROPENSITY <- c(FALSE, TRUE)
+
+np <- list(c(400, 20), c(100, 200), c(200, 200), c(400, 200))
 coef_settings <- c(1, 2)
 escale <- c(1, 4)
-mscale <- c(-10, 5, 5, 10)
+mscale <- c(-10, -5, 5, 10)
 y_alpha <- c(0, 1)
 EST_PROPENSITY <- c(FALSE, TRUE)
 
@@ -39,3 +46,6 @@ retcodes <- mclapply(1:nrow(all_settings),
          }, mc.cores=detectCores())
 
 print(retcodes)
+save(retcodes, 
+     file=paste("logs/experiment_exit_status_",
+                gsub(" ", "", now(), fixed=TRUE), ".log", sep=""))
