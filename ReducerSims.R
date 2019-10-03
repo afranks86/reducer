@@ -7,26 +7,32 @@ source("utilities.R")
 
 argv <- R.utils::commandArgs(trailingOnly=TRUE, asValues=TRUE)
 
+ESTIMAND <- as.character(get_attr_default(argv, "estimand", "ATE"))
+
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
 Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 115))
-Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 1))
+Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 0))
 
-EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", FALSE))
+EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", TRUE))
 PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
-T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 115))
+T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
-tau <- as.numeric(get_attr_default(argv, "tau", 0))
-coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 15))
-escale <- as.numeric(get_attr_default(argv, "escale", 3))
+tau <- as.numeric(get_attr_default(argv, "tau", 1))
+coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
+escale <- as.numeric(get_attr_default(argv, "escale", 1))
+
+eta <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
 times <- as.numeric(get_attr_default(argv, "times", 50))
 iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
-n <- as.numeric(get_attr_default(argv, "n", 1000))
-p <- as.numeric(get_attr_default(argv, "p", 1000))
+sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 20))
+
+n <- as.numeric(get_attr_default(argv, "n", 100))
+p <- as.numeric(get_attr_default(argv, "p", 100))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
@@ -48,9 +54,8 @@ bias_times <- if(bias_debug) 1 else times
 
 w2_scale_vec <- c(seq(1, -1, by=-.1))
 
-true_ate_vec <- tau_hat_vec <- ipw_vec <- ipw_d_vec <- aipw_vec <- aipw_d_vec <- naive_vec <- numeric(iters)
-results_array <- array(dim=c(iters, 6, length(w2_scale_vec)))
-
+results_array <- array(dim=c(iters, 9, length(w2_scale_vec)))
+w2lim_true_vec <- numeric(iters)
 
 for(iter  in 1:iters) {
 
@@ -65,11 +70,10 @@ for(iter  in 1:iters) {
         alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
         beta <- c(-1, 0.75, 1, rep(0, p-3))/sqrt(3)
     }
-    cor(alpha, beta)
     
     true_ate <- tau
     
-    simdat <- gen_linearY_logisticT(n, p, tau, alpha, beta, mscale, escale)
+    simdat <- gen_linearY_logisticT(n, p, tau, alpha, beta, mscale, escale, sigma2_y)
     
     X <- simdat$X
     T <- simdat$T
@@ -91,13 +95,19 @@ for(iter  in 1:iters) {
     mhat1 <- get_attr_default(out_ests, "mhat1", X %*% alpha + tau)
     tau_hat <- get_attr_default(out_ests, "tau_hat", tau)
     
-    prop_ests <- if(EST_PROPENSITY) estimate_propensity(X, T, cv=PROP_CV, T_lambda_min=T_LAMBDA, alpha=T_ALPHA)
-                 else list()
+    if(EST_PROPENSITY) {
+        prop_ests <- estimate_propensity(X, T, cv=PROP_CV,
+                                         T_lambda_min=T_LAMBDA,
+                                         eta=eta, alpha=T_ALPHA)
+    } else {
+        prop_ests <- list()
+    }
     
     beta_hat <- get_attr_default(prop_ests, "beta_hat", beta * escale)
     beta_hat_normalized <- get_attr_default(prop_ests, "beta_hat_normalized", beta)
     escale_hat <- get_attr_default(prop_ests, "escale_hat", escale)
     ehat <- get_attr_default(prop_ests, "ehat", e)
+    ehat_clip <- get_attr_default(prop_ests, "ehat_clip", NULL)
     xb <- X %*% beta_hat_normalized
    
     ## ################
@@ -116,8 +126,9 @@ for(iter  in 1:iters) {
         debug_mvecs <- spec$vectors[,c(1,p)]
     }
    
-    # Depending on correlation between alpha and beta, switch eigenspace labels to
-    # traverse the "closed" side of the hyperbola as we vary the w2 parameter
+    ## Depending on correlation between alpha and beta, switch eigenspace labels to
+    ## traverse the "closed" side of the hyperbola as we vary the w2 parameter
+    print(ab_dot_prod)
     if(ab_dot_prod < 0){
         mvals <- mvals[2:1]
         mvecs <- mvecs[,2:1]
@@ -137,10 +148,13 @@ for(iter  in 1:iters) {
         residual <- Y - X %*% alpha_hat - T * tau_hat
         
         ## Naive difference in means
-        ate_naive <- mean(Y[T == 1]) - mean(Y[T == 0])
+        naive <- mean(Y[T == 1]) - mean(Y[T == 0])
         
         ## Standard IPW
-        ate_ipw <- ipw_est(ehat, T, Y, hajek=TRUE)
+        ipw <- ipw_est(ehat, T, Y, estimand, hajek=TRUE)
+
+
+        ipw_clip <- ipw_est(ehat_clip, T, Y, estimand, hajek=TRUE)
         
         ## Compute IPW_d, using reduced d 
         ## w2 is the tuning parameter for how similar d is to to ehat vs mhat,
@@ -150,13 +164,45 @@ for(iter  in 1:iters) {
                          w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
                          alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
 
-        ate_ipw_d <- bias$bias1 - bias$bias0
+        ipw_d <- bias$bias1 - bias$bias0
+
+        ## IPW d using true prognostic score and true propensity score
+        alpha_normalized <- alpha/sqrt(sum(alpha^2))
+        beta_normalized <- beta/sqrt(sum(beta^2))
+        ab_dot_prod_true <- as.numeric(t(alpha_normalized) %*% beta_normalized)
+        mvecs_true <- cbind((alpha_normalized + beta_normalized) / sqrt(2 + 2 * ab_dot_prod_true),
+        (alpha_normalized - beta_normalized) / sqrt(2 - 2 * ab_dot_prod))
+        mvals_true <- c((ab_dot_prod_true + 1)/2, (ab_dot_prod_true - 1)/2)
+        if(ab_dot_prod_true < 0){
+            mvals_true <- mvals_true[2:1]
+            mvecs_true <- mvecs_true[, 2:1]
+        }
+
+        w2_lim_true <- -sqrt(abs(mvals_true[2]))
+        w2lim_true_vec[iters] <- w2_lim_true
+        bias <- get_bias(T=T, Y=Y, X=X, xb=X %*% beta_normalized,
+                         mvecs=mvecs_true, mvals=mvals_true,
+                         ab_dot_prod=as.numeric(t(alpha) %*% beta),
+                         escale=escale,
+                         w2=w2scale*w2_lim_true,
+                         w2lim=w2_lim_true,
+                         times=bias_times,
+                         DEBUG=bias_debug,
+                         alpha_hat_normalized=alpha_normalized,
+                         beta_hat_normalized=beta_normalized)
+
+        ipw_d_oracle <- bias$bias1 - bias$bias0
+
 
         ## Compute standard AIPW using known true e  
         #mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(1 / e[T==1] * residual[T==1]) / sum(1 / e[T==1])
         #mu_ctrl <- mean(X %*% alpha_hat) + sum(1/ (1-e[T==0]) * residual[T==0]) / sum(1 / (1-e[T==0]))
-        #ate_aipw <- mu_treat - mu_ctrl
-        ate_aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) + ipw_est(ehat, T, residual, hajek=TRUE)
+        #aipw <- mu_treat - mu_ctrl
+        aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
+            ipw_est(ehat_clip, T, residual, hajek=TRUE)
+
+        aipw_clip <- mean(X %*% alpha_hat + tau_hat) -
+            mean(X %*% alpha_hat) + ipw_est(ehat_clip, T, residual, hajek=TRUE)
         
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
@@ -168,57 +214,35 @@ for(iter  in 1:iters) {
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
         mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
-        ate_aipw_d <- mu_treat - mu_ctrl
+        aipw_d <- mu_treat - mu_ctrl
 
-        print(sprintf("Naive: %.3f, Reg: %.3f, IPW: %.3f, IPW-d: %.3f, AIPW: %.3f, AIPW-d: %.3f",
-                      ate_naive, tau_hat, ate_ipw, ate_ipw_d, ate_aipw, ate_aipw_d))
+        print(sprintf("Naive: %.3f, Reg: %.3f, IPW: %.3f, IPW-clip: %.3f, IPW-d: %.3f, IPW-d-oracle: %.3f, AIPW: %.3f, AIPW-clip: %.3f, AIPW-d: %.3f",
+                      naive, tau_hat, ipw, ipw_clip,
+                      ipw_d, ipw_d_oracle, aipw, aipw_clip, aipw_d))
         
-        true_ate_vec[iter] <- true_ate
-        tau_hat_vec[iter] <- tau_hat
-        ipw_vec[iter] <- ate_ipw
-        ipw_d_vec[iter] <- ate_ipw_d
-        aipw_vec[iter] <- ate_aipw
-        aipw_d_vec[iter] <- ate_aipw_d
-        naive_vec[iter] <- ate_naive
-
         results_array[iter, 1, j] <- tau_hat
-        results_array[iter, 2, j] <- ate_ipw
-        results_array[iter, 3, j] <- ate_ipw_d
-        results_array[iter, 4, j] <- ate_aipw
-        results_array[iter, 5, j] <- ate_aipw_d
-        results_array[iter, 6, j] <- ate_naive
+        results_array[iter, 2, j] <- ipw
+        results_array[iter, 3, j] <- ipw_d
+        results_array[iter, 4, j] <- ipw_d_oracle
+        results_array[iter, 5, j] <- ipw_clip
+        results_array[iter, 6, j] <- aipw
+        results_array[iter, 7, j] <- aipw_d
+        results_array[iter, 8, j] <- aipw_clip
+        results_array[iter, 9, j] <- naive
         
     }
 
-                                        # rmse
-    sqrt(apply((rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec)^2, 1, 
-               function(x) mean(x, na.rm=TRUE)))
-
-                                        # mean absolute error
-    apply(abs(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec), 1, 
-          function(x) median(x, na.rm=TRUE))
-
-                                        # bias
-    apply(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec, 1, 
-          function(x) mean(x, na.rm=TRUE))
-
-                                        # neg/pos bias fraction
-    apply((sign(rbind(tau_hat_vec, ipw_vec, ipw_d_vec, aipw_vec, aipw_d_vec) - true_ate_vec)+1)/2, 1, 
-          function(x) mean(x, na.rm=TRUE))
-
-    #save(results_array,
-    #     file=sprintf("results_negn%i_p%i_escale%.1f_wmax%.2f_wmin%.2f_%s.RData",
-    #                  n, p ,escale,
-    #                  max(w2_scale_vec), min(w2_scale_vec),
-    #                  today()))
 }
 
-dimnames(results_array) <- list(1:iters, c("Regression", "IPW", "IPW_d", "AIPW", "AIPW_d", "Naive"), w2_scale_vec)
+dimnames(results_array) <- list(1:iters,
+                                c("Regression", "IPW", "IPW_d", "IPW_d_oracle",
+                                  "IPW_clip", "AIPW", "AIPW_d", "AIPW_clip",
+                                  "Naive"), w2_scale_vec)
 sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
-save(results_array, true_ate,
+save(results_array, true_ate, w2lim_true_vec,
      file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
                   n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY,
                   gsub(" ", "", now(), fixed=TRUE)))
