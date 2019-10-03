@@ -11,10 +11,10 @@ iters <- 100
 #y_alpha <- c(0, 1)
 #EST_PROPENSITY <- c(FALSE, TRUE)
 
-np <- list(c(400, 20), c(100, 200), c(200, 200), c(400, 200))
-coef_settings <- c(1, 2)
+np <- list(c(200, 200))
+coef_settings <- c(1)
 escale <- c(1, 4)
-mscale <- c(-10, -5, 5, 10)
+mscale <- c(5, 10)
 y_alpha <- c(0, 1)
 EST_PROPENSITY <- c(FALSE, TRUE)
 
@@ -28,24 +28,31 @@ script_fstring <- paste(RSCRIPT_ALIAS, "ReducerSims.R", option_fstring, sprintf(
 
 logfile_fstring <- "logs/log_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.log"
 
+run_setting <- function(row){
+    row <- unlist(row)
+    n <- row[1]
+    p <- row[2]
+    cc <- row[3]
+    ee <- row[4]
+    mm <- row[5]
+    aa <- row[6]
+    est <- row[7]
+    
+    call <- sprintf(script_fstring, n, p, cc, ee, mm, aa, est)
+    print(call)
+    logfile <- sprintf(logfile_fstring, n, p, cc, ee, mm, aa, est,
+                       gsub(" ", "", now(), fixed=TRUE))
+    system(paste(call, ">", logfile, "2>&1"))
+}
+stop()
+
+
 retcodes <- mclapply(1:nrow(all_settings),
          function(i){
-             n <- all_settings[i,1][[1]][1]
-             p <- all_settings[i,1][[1]][2]
-             cc <- all_settings[i,2]
-             ee <- all_settings[i,3]
-             mm <- all_settings[i,4]
-             aa <- all_settings[i,5]
-             est <- all_settings[i,6]
-             
-             call <- sprintf(script_fstring, n, p, cc, ee, mm, aa, est)
-             print(call)
-             logfile <- sprintf(logfile_fstring, n, p, cc, ee, mm, aa, est,
-                                gsub(" ", "", now(), fixed=TRUE))
-             system(paste(call, ">", logfile, "2>&1"))
+             run_setting(all_settings[i,])
          }, mc.cores=detectCores())
 
 print(retcodes)
-save(retcodes, 
+save(retcodes, all_settings,
      file=paste("logs/experiment_exit_status_",
                 gsub(" ", "", now(), fixed=TRUE), ".log", sep=""))
