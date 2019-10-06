@@ -98,7 +98,7 @@ estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115,
         eta <- 0
         warning(sprintf("eta  = %f", eta))
     }
-    
+
     propensity_fit <- glmnet(cbind(X), T, family="binomial", 
                           alpha=alpha, penalty.factor = rep(1, p),intercept=FALSE, 
                           lambda=T_lambda_min)
@@ -145,7 +145,8 @@ compute_gammas <- function(ab_dot_prod, mvals, mvecs, w2, times){
     gammas
 }
 
-get_bias_vec <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10,
+get_bias_vec <- function(T, Y, X, xb, estimand,
+                         mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10,
                          DEBUG=FALSE, alpha_hat_normalized=NA, beta_hat_normalized=NA) {
     
     ### Compute coefficient vectors gamma corresponding to reductions
@@ -178,8 +179,18 @@ get_bias_vec <- function(T, Y, X, xb, mvecs, mvals, ab_dot_prod, escale, w2=0, w
     }
    
     ## Compute inverse weighted group means -- uses Hajek estimator
-    trt_wt <- 1 / e_dd
-    ctrl_wt <- 1 / (1-e_dd)
+
+    if(estimand == "ATT") {
+        trt_wt <- matrix(1, nrow=nrow(e_dd), ncol=ncol(e_dd))
+        ctrl_wt <- e_dd / (1-e_dd)
+    }  else if (estimand == "ATC") {
+        trt_wt <- (1 - e_dd) / e_dd
+        ctrl_wt <- matrix(1, nrow=nrow(e_dd), ncol=ncol(e_dd))
+    } else {
+        trt_wt <- 1 / e_dd
+        ctrl_wt <- 1 / (1 - e_dd) 
+    }
+    
     trt_wt_means <- colSums((trt_wt * as.vector(Y))[T == 1,,drop=FALSE]) /
         colSums(trt_wt[T == 1,,drop=FALSE])
     ctrl_wt_means <- colSums((ctrl_wt * as.vector(Y))[T == 0,,drop=FALSE]) /
