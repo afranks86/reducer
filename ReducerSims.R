@@ -7,8 +7,6 @@ source("utilities.R")
 
 argv <- R.utils::commandArgs(trailingOnly=TRUE, asValues=TRUE)
 
-ESTIMAND <- as.character(get_attr_default(argv, "estimand", "ATE"))
-
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
 Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 115))
@@ -19,12 +17,15 @@ PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
+
+estimand <- as.character(get_attr_default(argv, "estimand", "ATE"))
+
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
 escale <- as.numeric(get_attr_default(argv, "escale", 1))
 
-eta <- as.numeric(get_attr_default(argv, "eta", 0.1))
+eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
 times <- as.numeric(get_attr_default(argv, "times", 50))
 iters <- as.numeric(get_attr_default(argv, "iters", 50))
@@ -56,6 +57,13 @@ w2_scale_vec <- c(seq(1, -1, by=-.1))
 
 results_array <- array(dim=c(iters, 9, length(w2_scale_vec)))
 w2lim_true_vec <- numeric(iters)
+eta_vec <- numeric(iters)
+
+dimnames(results_array) <- list(1:iters,
+                                c("Regression", "IPW", "IPW_d", "IPW_d_oracle",
+                                  "IPW_clip", "AIPW", "AIPW_d", "AIPW_clip",
+                                  "Naive"),
+                                w2_scale_vec)
 
 for(iter  in 1:iters) {
 
@@ -85,7 +93,7 @@ for(iter  in 1:iters) {
     ## Set nuisance parameters
     ## #################
     
-    out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, cv=OUTCOME_CV, Y_lambda_min=Y_LAMBDA, alpha=Y_ALPHA)
+    out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, estimand, cv=OUTCOME_CV, Y_lambda_min=Y_LAMBDA, alpha=Y_ALPHA)
                 else list()
    
     alpha_hat <- get_attr_default(out_ests, "alpha_hat", alpha)
@@ -98,7 +106,7 @@ for(iter  in 1:iters) {
     if(EST_PROPENSITY) {
         prop_ests <- estimate_propensity(X, T, cv=PROP_CV,
                                          T_lambda_min=T_LAMBDA,
-                                         eta=eta, alpha=T_ALPHA)
+                                         eta=eta_clip, alpha=T_ALPHA)
     } else {
         prop_ests <- list()
     }
@@ -109,10 +117,87 @@ for(iter  in 1:iters) {
     ehat <- get_attr_default(prop_ests, "ehat", e)
     ehat_clip <- get_attr_default(prop_ests, "ehat_clip", NULL)
     xb <- X %*% beta_hat_normalized
-   
-    ## ################
-    ## Compute hyperbola
-    ## #################
+
+    eta_vec[iter] <- min(min(ehat), 1-max(ehat))
+    
+
+    ## ##################
+    ## Non-reduced estimands
+    ## ##################
+    
+    ## Naive difference in means
+    naive <- mean(Y[T == 1]) - mean(Y[T == 0])
+
+    ## Standard IPW
+    ipw <- ipw_est(ehat, T, Y, estimand, hajek=TRUE)
+
+    ipw_clip <- ipw_est(ehat_clip, T, Y, estimand, hajek=TRUE)
+    
+    ## Standard AIPW
+    aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
+        ipw_est(ehat, T, residual, estimand, hajek=TRUE)
+
+
+    ## Compute clipped AIPW
+    aipw_clip <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
+        ipw_est(ehat_clip, T, residual, estimand, hajek=TRUE)
+
+
+    ## IPW d using true prognostic score and true propensity score
+    alpha_normalized <- alpha/sqrt(sum(alpha^2))
+    beta_normalized <- beta/sqrt(sum(beta^2))
+    ab_dot_prod_true <- as.numeric(t(alpha_normalized) %*% beta_normalized)
+    mvecs_true <- cbind((alpha_normalized + beta_normalized) / sqrt(2 + 2 * ab_dot_prod_true),
+    (alpha_normalized - beta_normalized) / sqrt(2 - 2 * ab_dot_prod))
+    mvals_true <- c((ab_dot_prod_true + 1)/2, (ab_dot_prod_true - 1)/2)
+    if(ab_dot_prod_true < 0){
+        mvals_true <- mvals_true[2:1]
+        mvecs_true <- mvecs_true[, 2:1]
+    }
+
+    w2_lim_true <- -sqrt(abs(mvals_true[2]))
+    w2lim_true_vec[iters] <- w2_lim_true
+    for(j in 1:length(w2_scale_vec)) {
+        
+        w2scale <- w2_scale_vec[j]
+        bias <- get_bias(T=T, Y=Y, X=X, xb=X %*% beta_normalized,
+                         estimand=estimand,
+                         mvecs=mvecs_true, mvals=mvals_true,
+                         ab_dot_prod=as.numeric(t(alpha) %*% beta),
+                         escale=escale,
+                         w2=w2scale*w2_lim_true,
+                         w2lim=w2_lim_true,
+                         times=bias_times,
+                         DEBUG=bias_debug,
+                         alpha_hat_normalized=alpha_normalized,
+                         beta_hat_normalized=beta_normalized)
+
+        ipw_d_oracle <- bias$bias1 - bias$bias0
+        results_array[iter, "IPW_d_oracle", j] <- ipw_d_oracle
+    }
+
+    results_array[iter, "Regression", ] <- tau_hat
+    results_array[iter, "IPW", ] <- ipw
+    results_array[iter, "IPW_clip", ] <- ipw_clip
+    results_array[iter, "AIPW", ] <- aipw
+    results_array[iter, "AIPW_clip", ] <- aipw_clip
+    results_array[iter, "Naive", ] <- naive
+
+    ## If regularization completely collapses ehat,
+    ## no further reduction is possible
+    if(var(ehat) == 0) {
+
+        results_array[iter, "IPW_d", ] <- ipw
+        results_array[iter, "AIPW_d", ] <- aipw
+
+        next
+    }
+
+
+
+    ## ####################################
+    ## Compute hyperbola for reduction
+    ## ##################
     
     ab_dot_prod <- as.numeric(t(alpha_hat_normalized) %*% beta_hat_normalized)
     mvecs <- cbind((alpha_hat_normalized + beta_hat_normalized)/sqrt(2 + 2 * ab_dot_prod),
@@ -147,70 +232,28 @@ for(iter  in 1:iters) {
 
         residual <- Y - X %*% alpha_hat - T * tau_hat
         
-        ## Naive difference in means
-        naive <- mean(Y[T == 1]) - mean(Y[T == 0])
-        
-        ## Standard IPW
-        ipw <- ipw_est(ehat, T, Y, estimand, hajek=TRUE)
-
-
-        ipw_clip <- ipw_est(ehat_clip, T, Y, estimand, hajek=TRUE)
-        
         ## Compute IPW_d, using reduced d 
         ## w2 is the tuning parameter for how similar d is to to ehat vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
-        bias <- get_bias(T=T, Y=Y, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
+        bias <- get_bias(T=T, Y=Y, X=X, xb=xb, estimand=estimand,
+                         mvecs=mvecs, mvals=mvals,
                          ab_dot_prod=ab_dot_prod, escale=escale_hat,
                          w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
                          alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
 
         ipw_d <- bias$bias1 - bias$bias0
 
-        ## IPW d using true prognostic score and true propensity score
-        alpha_normalized <- alpha/sqrt(sum(alpha^2))
-        beta_normalized <- beta/sqrt(sum(beta^2))
-        ab_dot_prod_true <- as.numeric(t(alpha_normalized) %*% beta_normalized)
-        mvecs_true <- cbind((alpha_normalized + beta_normalized) / sqrt(2 + 2 * ab_dot_prod_true),
-        (alpha_normalized - beta_normalized) / sqrt(2 - 2 * ab_dot_prod))
-        mvals_true <- c((ab_dot_prod_true + 1)/2, (ab_dot_prod_true - 1)/2)
-        if(ab_dot_prod_true < 0){
-            mvals_true <- mvals_true[2:1]
-            mvecs_true <- mvecs_true[, 2:1]
-        }
-
-        w2_lim_true <- -sqrt(abs(mvals_true[2]))
-        w2lim_true_vec[iters] <- w2_lim_true
-        bias <- get_bias(T=T, Y=Y, X=X, xb=X %*% beta_normalized,
-                         mvecs=mvecs_true, mvals=mvals_true,
-                         ab_dot_prod=as.numeric(t(alpha) %*% beta),
-                         escale=escale,
-                         w2=w2scale*w2_lim_true,
-                         w2lim=w2_lim_true,
-                         times=bias_times,
-                         DEBUG=bias_debug,
-                         alpha_hat_normalized=alpha_normalized,
-                         beta_hat_normalized=beta_normalized)
-
-        ipw_d_oracle <- bias$bias1 - bias$bias0
 
 
-        ## Compute standard AIPW using known true e  
-        #mu_treat <- mean(X %*% alpha_hat + tau_hat) + sum(1 / e[T==1] * residual[T==1]) / sum(1 / e[T==1])
-        #mu_ctrl <- mean(X %*% alpha_hat) + sum(1/ (1-e[T==0]) * residual[T==0]) / sum(1 / (1-e[T==0]))
-        #aipw <- mu_treat - mu_ctrl
-        aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
-            ipw_est(ehat_clip, T, residual, hajek=TRUE)
-
-        aipw_clip <- mean(X %*% alpha_hat + tau_hat) -
-            mean(X %*% alpha_hat) + ipw_est(ehat_clip, T, residual, hajek=TRUE)
-        
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
-        bias <- get_bias(T=T, Y=residual, X=X, xb=xb, mvecs=mvecs, mvals=mvals,
+        bias <- get_bias(T=T, Y=residual, X=X, xb=xb, estimand=estimand,
+                         mvecs=mvecs, mvals=mvals,
                          ab_dot_prod=ab_dot_prod, escale=escale_hat,
                          w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
                          alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
+
         ## Correct bias and compute AIPW_d
         mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
         mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
@@ -218,31 +261,23 @@ for(iter  in 1:iters) {
 
         print(sprintf("Naive: %.3f, Reg: %.3f, IPW: %.3f, IPW-clip: %.3f, IPW-d: %.3f, IPW-d-oracle: %.3f, AIPW: %.3f, AIPW-clip: %.3f, AIPW-d: %.3f",
                       naive, tau_hat, ipw, ipw_clip,
-                      ipw_d, ipw_d_oracle, aipw, aipw_clip, aipw_d))
+                      ipw_d, results_array[iter, "IPW_d_oracle", j],
+                      aipw, aipw_clip, aipw_d))
         
-        results_array[iter, 1, j] <- tau_hat
-        results_array[iter, 2, j] <- ipw
-        results_array[iter, 3, j] <- ipw_d
-        results_array[iter, 4, j] <- ipw_d_oracle
-        results_array[iter, 5, j] <- ipw_clip
-        results_array[iter, 6, j] <- aipw
-        results_array[iter, 7, j] <- aipw_d
-        results_array[iter, 8, j] <- aipw_clip
-        results_array[iter, 9, j] <- naive
+
+        results_array[iter, "IPW_d", j] <- ipw_d
+        results_array[iter, "AIPW_d", j] <- aipw_d
         
     }
 
 }
 
-dimnames(results_array) <- list(1:iters,
-                                c("Regression", "IPW", "IPW_d", "IPW_d_oracle",
-                                  "IPW_clip", "AIPW", "AIPW_d", "AIPW_clip",
-                                  "Naive"), w2_scale_vec)
+
 sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
-save(results_array, true_ate, w2lim_true_vec,
+save(results_array, true_ate, w2lim_true_vec, eta_vec,
      file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
                   n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY,
                   gsub(" ", "", now(), fixed=TRUE)))
