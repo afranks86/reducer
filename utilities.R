@@ -133,8 +133,9 @@ get_attr_default <- function(thelist, attrname, default){
 
 compute_gammas <- function(ab_dot_prod, mvals, mvecs, w2, times){
     p <- dim(mvecs)[1]
+
     ## Sample random basis vectors from the null space
-    null_vecs <- NullC(mvecs)[, 1:times]#sample(p, size=times, replace=FALSE)]
+    null_vecs <- NullC(mvecs)[, sample(p-ncol(mvecs), size=min(p-ncol(mvecs), times), replace=FALSE)]
     ## Compute coefficients for span(alpha, beta) eigenvectors
     w1 <- sqrt(as.numeric((ab_dot_prod - mvals[2] * w2^2)/mvals[1]))
     
@@ -165,20 +166,21 @@ get_bias_vec <- function(T, Y, X, xb, estimand,
 
     ## Stop if magnitude of c1 is too large, and likely not due to numerical error.
     ## Inserted so that max statement in next line does not silence bugs.
-    stopifnot(all(1 - c1s^2 > -1e-6))
+    
+    ## stopifnot(all(1 - c1s^2 >= -1e-8)) ## changed this to 0, why can' c1s be 0?
     c2s <- sqrt(pmax(1-c1s^2, 0))
     
     ## For each d, we will be averaging over a bunch of normal samples
     normal_samples <- rnorm(500, sd=1)
     ## Matrix of projected propensity scores
     e_dd <- matrix(NA, nr=dim(dd)[1], nc=dim(dd)[2])
-    for(i in 1:times){
+    for(i in 1:ncol(e_dd)){
         ## For each component of dd, add each value of normal_sample and evaluate logistic
         ## Implement this as an outer sum between a column of dd and normal_samples
         integrand <- invlogit(escale * (outer(c1s[i] * dd[,i], c2s[i] * normal_samples, FUN="+")), a=0, b=1)
-        e_dd[,i] <- rowMeans(integrand)
+        e_dd[, i] <- rowMeans(integrand)
     }
-   
+    
     ## Compute inverse weighted group means -- uses Hajek estimator
     eta <- min(mean(apply(e_dd, 2, min)), 1 - mean(apply(e_dd, 2, max)))
     

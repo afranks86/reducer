@@ -23,7 +23,7 @@ estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
-escale <- as.numeric(get_attr_default(argv, "escale", 4))
+escale <- as.numeric(get_attr_default(argv, "escale", 3))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -32,8 +32,8 @@ iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 20))
 
-n <- as.numeric(get_attr_default(argv, "n", 100))
-p <- as.numeric(get_attr_default(argv, "p", 100))
+n <- as.numeric(get_attr_default(argv, "n", 1000))
+p <- as.numeric(get_attr_default(argv, "p", 10))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
@@ -148,7 +148,7 @@ for(iter  in 1:iters) {
         bias <- get_bias(T=T, Y=Y, X=X, xb=X %*% beta_normalized,
                          estimand=estimand,
                          mvecs=mvecs_true, mvals=mvals_true,
-                         ab_dot_prod=as.numeric(t(alpha) %*% beta),
+                         ab_dot_prod=ab_dot_prod_true,
                          escale=escale,
                          w2=w2scale*w2_lim_true,
                          w2lim=w2_lim_true,
@@ -235,7 +235,7 @@ for(iter  in 1:iters) {
         ipw <- ipw_est(ehat_match, T, Y, estimand, hajek=TRUE)
         
         ## Standard AIPW
-        aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
+        aipw <- tau_hat +
             ipw_est(ehat_match, T, residual, estimand, hajek=TRUE)
 
         ## Compute clipped estimators
