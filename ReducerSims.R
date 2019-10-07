@@ -23,7 +23,7 @@ estimand <- as.character(get_attr_default(argv, "estimand", "ATE"))
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
-escale <- as.numeric(get_attr_default(argv, "escale", 1))
+escale <- as.numeric(get_attr_default(argv, "escale", 4))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -57,7 +57,8 @@ w2_scale_vec <- c(seq(1, -1, by=-.1))
 
 results_array <- array(dim=c(iters, 9, length(w2_scale_vec)))
 w2lim_true_vec <- numeric(iters)
-eta_vec <- numeric(iters)
+
+eta_matrix <- matrix(NA, nrow=iters, ncol=length(w2_scale_vec))
 
 dimnames(results_array) <- list(1:iters,
                                 c("Regression", "IPW", "IPW_d", "IPW_d_oracle",
@@ -115,40 +116,24 @@ for(iter  in 1:iters) {
     beta_hat_normalized <- get_attr_default(prop_ests, "beta_hat_normalized", beta)
     escale_hat <- get_attr_default(prop_ests, "escale_hat", escale)
     ehat <- get_attr_default(prop_ests, "ehat", e)
-    ehat_clip <- get_attr_default(prop_ests, "ehat_clip", NULL)
     xb <- X %*% beta_hat_normalized
 
-    eta_vec[iter] <- min(min(ehat), 1-max(ehat))
+
+    ## etas for all glm fits
+    ehat_all <- get_attr_default(prop_ests, "ehat_all", matrix(e, ncol=1))
+    eta_hat <- pmin(1 - apply(ehat_all, 2, max), apply(ehat_all, 2, min))
     
 
     ## ##################
     ## Non-reduced estimands
     ## ##################
     
-    ## Naive difference in means
-    naive <- mean(Y[T == 1]) - mean(Y[T == 0])
-
-    ## Standard IPW
-    ipw <- ipw_est(ehat, T, Y, estimand, hajek=TRUE)
-
-    ipw_clip <- ipw_est(ehat_clip, T, Y, estimand, hajek=TRUE)
-    
-    ## Standard AIPW
-    aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
-        ipw_est(ehat, T, residual, estimand, hajek=TRUE)
-
-
-    ## Compute clipped AIPW
-    aipw_clip <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
-        ipw_est(ehat_clip, T, residual, estimand, hajek=TRUE)
-
-
     ## IPW d using true prognostic score and true propensity score
     alpha_normalized <- alpha/sqrt(sum(alpha^2))
     beta_normalized <- beta/sqrt(sum(beta^2))
     ab_dot_prod_true <- as.numeric(t(alpha_normalized) %*% beta_normalized)
     mvecs_true <- cbind((alpha_normalized + beta_normalized) / sqrt(2 + 2 * ab_dot_prod_true),
-    (alpha_normalized - beta_normalized) / sqrt(2 - 2 * ab_dot_prod))
+    (alpha_normalized - beta_normalized) / sqrt(2 - 2 * ab_dot_prod_true))
     mvals_true <- c((ab_dot_prod_true + 1)/2, (ab_dot_prod_true - 1)/2)
     if(ab_dot_prod_true < 0){
         mvals_true <- mvals_true[2:1]
@@ -177,10 +162,9 @@ for(iter  in 1:iters) {
     }
 
     results_array[iter, "Regression", ] <- tau_hat
-    results_array[iter, "IPW", ] <- ipw
-    results_array[iter, "IPW_clip", ] <- ipw_clip
-    results_array[iter, "AIPW", ] <- aipw
-    results_array[iter, "AIPW_clip", ] <- aipw_clip
+
+    ## Naive difference in means
+    naive <- mean(Y[T == 1]) - mean(Y[T == 0])
     results_array[iter, "Naive", ] <- naive
 
     ## If regularization completely collapses ehat,
@@ -213,7 +197,6 @@ for(iter  in 1:iters) {
    
     ## Depending on correlation between alpha and beta, switch eigenspace labels to
     ## traverse the "closed" side of the hyperbola as we vary the w2 parameter
-    print(ab_dot_prod)
     if(ab_dot_prod < 0){
         mvals <- mvals[2:1]
         mvecs <- mvecs[,2:1]
@@ -242,8 +225,27 @@ for(iter  in 1:iters) {
                          alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
 
         ipw_d <- bias$bias1 - bias$bias0
+        eta <- bias$eta
+        
+        ## Find glmnet fit that matches most extreme pscore
+        eta_matrix[iter, j] <- eta
+        ehat_match <- ehat_all[, which.min(abs(eta_hat - eta))]
 
+        ## Standard IPW
+        ipw <- ipw_est(ehat_match, T, Y, estimand, hajek=TRUE)
+        
+        ## Standard AIPW
+        aipw <- mean(X %*% alpha_hat + tau_hat) - mean(X %*% alpha_hat) +
+            ipw_est(ehat_match, T, residual, estimand, hajek=TRUE)
 
+        ## Compute clipped estimators
+        ehat_clip <- ehat
+        ehat_clip[ehat < eta] <- eta
+        ehat_clip[ehat > 1 - eta] <- 1 - eta
+
+        ipw_clip <- ipw_est(ehat_clip, T, Y, estimand, hajek=TRUE)
+        aipw_clip <- tau_hat +
+            ipw_est(ehat_clip, T, residual, estimand, hajek=TRUE)
 
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
@@ -255,29 +257,29 @@ for(iter  in 1:iters) {
                          alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
 
         ## Correct bias and compute AIPW_d
-        mu_treat <- mean(X %*% alpha_hat + tau_hat) + bias$bias1
-        mu_ctrl <- mean(X %*% alpha_hat) + bias$bias0
-        aipw_d <- mu_treat - mu_ctrl
+        aipw_d <- tau_hat + bias$bias1 - bias$bias0
+
+        results_array[iter, "IPW_d", j] <- ipw_d
+        results_array[iter, "AIPW_d", j] <- aipw_d
+        results_array[iter, "IPW", j] <- ipw
+        results_array[iter, "IPW_clip", j] <- ipw_clip
+        results_array[iter, "AIPW", j] <- aipw
+        results_array[iter, "AIPW_clip", ] <- aipw_clip
+
 
         print(sprintf("Naive: %.3f, Reg: %.3f, IPW: %.3f, IPW-clip: %.3f, IPW-d: %.3f, IPW-d-oracle: %.3f, AIPW: %.3f, AIPW-clip: %.3f, AIPW-d: %.3f",
                       naive, tau_hat, ipw, ipw_clip,
                       ipw_d, results_array[iter, "IPW_d_oracle", j],
                       aipw, aipw_clip, aipw_d))
-        
-
-        results_array[iter, "IPW_d", j] <- ipw_d
-        results_array[iter, "AIPW_d", j] <- aipw_d
-        
     }
 
 }
-
 
 sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
-save(results_array, true_ate, w2lim_true_vec, eta_vec,
+save(results_array, true_ate, w2lim_true_vec, eta_matrix, 
      file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
                   n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY,
                   gsub(" ", "", now(), fixed=TRUE)))

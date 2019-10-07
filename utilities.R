@@ -112,16 +112,18 @@ estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115,
                            }
     ehat <- predict(propensity_fit, type="response", newx=X)
 
-    ## Clipping
-    ehat_clip <- ehat
-    ehat_clip[ehat < eta] <- eta
-    ehat_clip[ehat > 1 - eta] <- 1 - eta
+
+    propensity_fit_all <- glmnet(cbind(X), T, family="binomial", 
+                             alpha=alpha, penalty.factor = rep(1, p),intercept=FALSE, 
+                             lambda=cvglm$lambda)
+    ehat_all <- predict(propensity_fit_all, type="response", newx=X)
     
     list(beta_hat=beta_hat,
          beta_hat_normalized=beta_hat_normalized,
          escale_hat=escale_hat,
          ehat=ehat,
          ehat_clip=ehat_clip,
+         ehat_all = ehat_all,
          lambda=T_lambda_min)
 }
 
@@ -179,7 +181,8 @@ get_bias_vec <- function(T, Y, X, xb, estimand,
     }
    
     ## Compute inverse weighted group means -- uses Hajek estimator
-
+    eta <- min(mean(apply(e_dd, 2, min)), 1 - mean(apply(e_dd, 2, max)))
+    
     if(estimand == "ATT") {
         trt_wt <- matrix(1, nrow=nrow(e_dd), ncol=ncol(e_dd))
         ctrl_wt <- e_dd / (1-e_dd)
@@ -195,7 +198,7 @@ get_bias_vec <- function(T, Y, X, xb, estimand,
         colSums(trt_wt[T == 1,,drop=FALSE])
     ctrl_wt_means <- colSums((ctrl_wt * as.vector(Y))[T == 0,,drop=FALSE]) /
         colSums(ctrl_wt[T == 0,,drop=FALSE])
-    list(bias0=mean(ctrl_wt_means), bias1=mean(trt_wt_means))
+    list(bias0=mean(ctrl_wt_means), bias1=mean(trt_wt_means), eta=eta)
     
 }
 
@@ -224,4 +227,8 @@ ipw_est <- function(e, T, Y, estimand, hajek=FALSE){
   } else {
     mean(wts * Y)
   }
+}
+
+aipw_est <- function(e, T, Y, estimand, hajek=FALSE){
+
 }
