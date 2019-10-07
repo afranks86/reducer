@@ -27,29 +27,30 @@ estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha
         Xfit <- X[T==0, ]
         Yfit <- Y[T==0]
         Xpred <- X[T==1, ]
+        penalty.factor <- rep(1, p)
     } else {
         Xfit <- cbind(T, X)
         Yfit <- Y
+        penalty.factor <- c(0, rep(1, p))
     }
 
-    
     if(cv){
         if(estimand == "ATT") {
-            penalty.factor <- rep(1, p)
+
             cvglm <- cv.glmnet(Xfit, Yfit, family="gaussian", 
                                alpha=alpha,
                                penalty.factor=penalty.factor,
                                intercept=FALSE)
-            Y_lambda_min <- cvglm$lambda.1se
+            Y_lambda_min <- cvglm$lambda.min
 
         } else {
 
             ## For ATE regression doesn't penalize T coefficient
-            penalty.factor <- c(0, rep(1, p))
+
             cvglm <- cv.glmnet(Xfit, Yfit, family="gaussian", 
                                alpha=alpha, penalty.factor = penalty.factor,
                                intercept=FALSE)
-            Y_lambda_min <- cvglm$lambda.1se
+            Y_lambda_min <- cvglm$lambda.min
         }
 
 
@@ -92,7 +93,7 @@ estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115,
     if(cv){
         cvglm <- cv.glmnet(cbind(X), T, family="binomial", 
                            alpha=alpha, penalty.factor = rep(1, p), intercept=FALSE)
-        T_lambda_min <- cvglm$lambda.1se
+        T_lambda_min <- cvglm$lambda.min
     }
 
     if(eta > 1 | eta < 0) {
