@@ -18,7 +18,7 @@ T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
 
-estimand <- as.character(get_attr_default(argv, "estimand", "ATE"))
+estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
