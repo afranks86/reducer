@@ -122,7 +122,6 @@ estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115,
          beta_hat_normalized=beta_hat_normalized,
          escale_hat=escale_hat,
          ehat=ehat,
-         ehat_clip=ehat_clip,
          ehat_all = ehat_all,
          lambda=T_lambda_min)
 }
