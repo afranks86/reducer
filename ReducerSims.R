@@ -23,7 +23,7 @@ estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
-escale <- as.numeric(get_attr_default(argv, "escale", 3))
+escale <- as.numeric(get_attr_default(argv, "escale", 4))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -280,6 +280,6 @@ sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
 save(results_array, true_ate, w2lim_true_vec, eta_matrix, 
-     file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.RData",
-                  n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY,
+     file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s_%s.RData",
+                  n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY, estimand,
                   gsub(" ", "", now(), fixed=TRUE)))
