@@ -11,9 +11,9 @@ iters <- 100
 #y_alpha <- c(0, 1)
 #EST_PROPENSITY <- c(FALSE, TRUE)
 
-np <- list(c(200, 200))
+np <- list(c(100, 100), c(500, 100), c(1000, 100))
 coef_settings <- c(1)
-escale <- c(1, 4)
+escale <- c(1, 4, 10)
 mscale <- c(5, 10)
 y_alpha <- c(0, 1)
 EST_PROPENSITY <- c(FALSE, TRUE)
