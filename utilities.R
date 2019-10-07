@@ -23,21 +23,18 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2
 
 estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha=0){
  
-    if(estimand == "ATC") {
+    if (estimand == "ATT"){
         Xfit <- X[T==0, ]
         Yfit <- Y[T==0]
         Xpred <- X[T==1, ]
-    } else if (estimand == "ATT"){
-        Xfit <- X[T==1, ]
-        Yfit <- Y[T==1]
-        Xpred <- X[T==0, ]
     } else {
         Xfit <- cbind(T, X)
         Yfit <- Y
     }
+
     
     if(cv){
-        if(estimand == "ATC" | estimand == "ATT") {
+        if(estimand == "ATT") {
             penalty.factor <- rep(1, p)
             cvglm <- cv.glmnet(Xfit, Yfit, family="gaussian", 
                                alpha=alpha,
@@ -57,26 +54,30 @@ estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha
 
 
     }
-    
+
     outcome_fit <- glmnet(Xfit, Yfit, family="gaussian", 
                           alpha=alpha, penalty.factor = penalty.factor,
                           intercept=FALSE, 
                           lambda=Y_lambda_min)
 
-    if(estimand == "ATC" | estimand == "ATT") {
+    if(estimand == "ATT") {
         alpha_hat <- coef(outcome_fit)[-1]
         alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
 
         mhat0 <- predict(outcome_fit, cbind(X[T==0, ]))
         mhat1 <- predict(outcome_fit, cbind(X[T==1, ]))
+
+        tau_hat <- mean(Y[T==1]) - mean(mhat1)
         
-    }  else {
+    } else {
         alpha_hat <- coef(outcome_fit)[-c(1,2)]
         alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
         mhat0 <- predict(outcome_fit, cbind(0, X))
-        mhat1 <- predict(outcome_fit, cbind(1, X))        
+        mhat1 <- predict(outcome_fit, cbind(1, X))
+
+        tau_hat <- mean(mhat1) - mean(mhat0)
     }
-    tau_hat <- mean(mhat1) - mean(mhat0)
+
     
     list(alpha_hat=alpha_hat,
          alpha_hat_normalized=alpha_hat_normalized,
