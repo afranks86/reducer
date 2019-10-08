@@ -226,6 +226,7 @@ for(iter  in 1:iters) {
 
         ipw_d <- bias$bias1 - bias$bias0
         eta <- bias$eta
+        cache_edd <- bias$e_dd
         
         ## Find glmnet fit that matches most extreme pscore
         eta_matrix[iter, j] <- eta
@@ -250,11 +251,12 @@ for(iter  in 1:iters) {
         ## Compute negative regression bias by balancing on residuals
         ## w2 is the tuning parameter for how similar to e vs mhat,
         ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
-        bias <- get_bias(T=T, Y=residual, X=X, xb=xb, estimand=estimand,
-                         mvecs=mvecs, mvals=mvals,
-                         ab_dot_prod=ab_dot_prod, escale=escale_hat,
-                         w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
-                         alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
+        #bias <- get_bias(T=T, Y=residual, X=X, xb=xb, estimand=estimand,
+        #                 mvecs=mvecs, mvals=mvals,
+        #                 ab_dot_prod=ab_dot_prod, escale=escale_hat,
+        #                 w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
+        #                 alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
+        bias <- compute_bias(T=T, Y=residual, e_dd=cache_edd, estimand=estimand)
 
         ## Correct bias and compute AIPW_d
         aipw_d <- tau_hat + bias$bias1 - bias$bias0

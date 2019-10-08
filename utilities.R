@@ -149,6 +149,7 @@ compute_gammas <- function(ab_dot_prod, mvals, mvecs, w2, times){
     gammas
 }
 
+## TODO: Refactor this and get_bias. Have get_bias only return weights, then call get_bias.
 get_bias_vec <- function(T, Y, X, xb, estimand,
                          mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10,
                          DEBUG=FALSE, alpha_hat_normalized=NA, beta_hat_normalized=NA) {
@@ -201,8 +202,27 @@ get_bias_vec <- function(T, Y, X, xb, estimand,
         colSums(trt_wt[T == 1,,drop=FALSE])
     ctrl_wt_means <- colSums((ctrl_wt * as.vector(Y))[T == 0,,drop=FALSE]) /
         colSums(ctrl_wt[T == 0,,drop=FALSE])
-    list(bias0=mean(ctrl_wt_means), bias1=mean(trt_wt_means), eta=eta)
+    list(bias0=mean(ctrl_wt_means), bias1=mean(trt_wt_means), eta=eta, e_dd=e_dd)
     
+}
+
+## TODO: Refactor this and get_bias. Have get_bias only return weights, then call get_bias.
+compute_bias <- function(T, Y, e_dd, estimand="ATT"){
+    if(estimand == "ATT") {
+        trt_wt <- matrix(1, nrow=nrow(e_dd), ncol=ncol(e_dd))
+        ctrl_wt <- e_dd / (1-e_dd)
+    }  else if (estimand == "ATC") {
+        trt_wt <- (1 - e_dd) / e_dd
+        ctrl_wt <- matrix(1, nrow=nrow(e_dd), ncol=ncol(e_dd))
+    } else {
+        trt_wt <- 1 / e_dd
+        ctrl_wt <- 1 / (1 - e_dd) 
+    }
+    trt_wt_means <- colSums((trt_wt * as.vector(Y))[T == 1,,drop=FALSE]) /
+        colSums(trt_wt[T == 1,,drop=FALSE])
+    ctrl_wt_means <- colSums((ctrl_wt * as.vector(Y))[T == 0,,drop=FALSE]) /
+        colSums(ctrl_wt[T == 0,,drop=FALSE])
+    list(bias0=mean(ctrl_wt_means), bias1=mean(trt_wt_means))
 }
 
 invlogit <- function(x, a, b) {
