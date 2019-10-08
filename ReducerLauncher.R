@@ -13,7 +13,7 @@ iters <- 100
 
 np <- list(c(100, 100), c(500, 100), c(1000, 100))
 coef_settings <- c(1)
-escale <- c(1, 4, 10)
+escale <- c(1, 4)
 mscale <- c(5, 10)
 y_alpha <- c(0, 1)
 EST_PROPENSITY <- c(FALSE, TRUE)
@@ -36,7 +36,7 @@ run_setting <- function(row){
     ee <- row[4]
     mm <- row[5]
     aa <- row[6]
-    est <- row[7]
+    est <- as.logical(row[7])
     
     call <- sprintf(script_fstring, n, p, cc, ee, mm, aa, est)
     print(call)
@@ -44,7 +44,6 @@ run_setting <- function(row){
                        gsub(" ", "", now(), fixed=TRUE))
     system(paste(call, ">", logfile, "2>&1"))
 }
-stop()
 
 
 retcodes <- mclapply(1:nrow(all_settings),
