@@ -3,8 +3,9 @@ library(ggridges)
 library(superheat)
 library(patchwork)
 library(RColorBrewer)
+library(kableExtra)
 
-results_dir <- "results_test"
+results_dir <- "results_20191008PM"
 
 results_files <- dir(results_dir)
 
@@ -28,8 +29,7 @@ for(i in 1:length(results_files)) {
     escale <- as.numeric(params[5])
     mscale <- as.numeric(params[6])
     yalpha <- as.numeric(params[7])
-    estimated_propensity <- as.logical(params[8]
-                                       )
+    estimated_propensity <- as.logical(params[8])
     estimand <- params[9]
     
     rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
@@ -43,7 +43,8 @@ for(i in 1:length(results_files)) {
         ggplot() + geom_line(aes(x=W, y=RMSE, col=Type, linetype=Type)) +
         theme_bw() + theme(legend.position="none") +
         scale_color_manual(values=cols_vec) +
-        scale_linetype_manual(values=lty_vec)
+        scale_linetype_manual(values=lty_vec) +
+        xlab(expression(w[2]))
 
     tib <- as_tibble(t(bias_mat))
     tib$W <- as.numeric(colnames(bias_mat))
@@ -51,14 +52,16 @@ for(i in 1:length(results_files)) {
         ggplot() + geom_line(aes(x=W, y=Bias, col=Type, linetype=Type)) +
         theme_bw() + theme(legend.position="none") + geom_hline(yintercept=0, linetype=2)  +
         scale_color_manual(values=cols_vec) +
-        scale_linetype_manual(values=lty_vec)
+        scale_linetype_manual(values=lty_vec) +
+        xlab(expression(w[2]))
 
     tib <- as_tibble(t(sqrt(var_mat)))
     tib$W <- as.numeric(colnames(bias_mat))
     sd_plot <- tib %>% gather(key=Type, value=SD, -W) %>%
         ggplot() + geom_line(aes(x=W, y=SD, col=Type, linetype=Type)) + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
         scale_color_manual(values=cols_vec) +
-        scale_linetype_manual(values=lty_vec)
+        scale_linetype_manual(values=lty_vec) +
+        xlab(expression(w[2]))
 
     if(coef == 1) {
         alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
@@ -87,73 +90,37 @@ for(i in 1:length(results_files)) {
     plot_name <- sprintf("results_n%i_p%i_coef%i_escale%.2f_mscale%.2f_yalpha%i_estpropensity=%s_%s",
                          n, p, coef, escale, mscale, yalpha, estimated_propensity, estimand)
 
-    rmse_plot + bias_plot + sd_plot + plot_annotation(title = plot_title,
-                                                       subtitle = sprintf("n=%i, p=%i, s_T=%.1f, s_Y=%.1f, a'b = %.2f",
-                                                                          n, p, escale, mscale, ab_dot_prod))
-    ggsave(filename=sprintf("figs_1/%s.pdf", plot_name), width=7, height=3)
+    ab_dot_prod_round <- round(ab_dot_prod, 2)
+    subtitle <- bquote("n=" ~.(n) ~ ", p=" ~.(p) ~ "," ~ s[T] == .(escale) ~ "," ~ s[Y] == .(mscale) ~ "," ~ alpha^T ~ beta ~ "=" ~ .(ab_dot_prod_round))
+
+    rmse_plot + bias_plot + sd_plot +
+        plot_annotation(title = subtitle)
+
+
+
+    ## rmse_plot + bias_plot + sd_plot +
+    ##     plot_annotation(title = plot_title,
+    ##                     subtitle = subtitle)
+    
+    ggsave(filename=sprintf("figs_20191008PM/%s.pdf", plot_name), width=7, height=3)
     
 }
 
 
-## Make MSE Tables
-library(xtable)
-table_indices <- sample(length(results_files), 20)
-rmse_table <- matrix(nrow=length(table_indices), ncol=8)
-table_rownames <- c()
-count <- 1
-
-for(i in table_indices) {
-
-    file_name <- results_files[i]
-    file_path <- paste0("results/", file_name)
-
-    print(file_name)
-
-    load(file_path)
-    params <- stringr::str_match(file_name,
-                                 "results_n(\\d+)_p(\\d+)_coef([0-9])+_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_estpropensity(TRUE|FALSE)_([ATEC]+)")
-
-    n <- as.numeric(params[2])
-    p <- as.numeric(params[3])
-    coef <- as.numeric(params[4])
-    escale <- as.numeric(params[5])
-    mscale <- as.numeric(params[6])
-    yalpha <- as.numeric(params[7])
-    estimated_propensity <- as.logical(params[8])
-    estimand <- as.logical(params[9])
-
-    rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
-
-    rmse_table[count, ] <- c(rmse_mat[c("Naive", "Regression", "IPW", "AIPW"), 1],
-                           rmse_mat[c("IPW_d", "AIPW_d"), "0"],
-                           rmse_mat[c("IPW_d", "AIPW_d"), "-1"])
-
-    table_rownames <-  c(table_rownames, sprintf("n=%i, p=%i, $s_T$=%.2f", n, p ,escale))
-    count <- count + 1
-}    
-colnames(rmse_table) <- c("Naive", "Regression", "IPW", "AIPW", "IPW-d(0)", "AIPW-d(0)", "IPW-d(-1)", "AIPW-d(-1)")
-
-rmse_table <- apply(rmse_table, 1, function(x) {
-    x <- round(x, 2)
-    min_index <- which.min(x)
-    x[min_index] <- paste0("BOLD", x[min_index])
-    x
-}) %>% t
-
-bold.somerows <- function(x) gsub('BOLD(.*)',paste('\\\\textbf{\\1','}'),x)
-
-row.names(rmse_table) <- paste0(table_rownames, 1:length(table_indices))
-print.xtable(xtable(rmse_table),
-             sanitize.text.function=bold.somerows)
+## results_dir <- "results"
+results_files <- dir(results_dir)
 
 
+## file_matches <- stringr::str_extract(results_files,
+##                                      sprintf("results_n%i_p%i_coef0_escale(-?\\d+\\.?\\d*)_mscale(\\d+\\.?\\d*)_yalpha[0-1]+_estpropensity%s", n, p, estpropensity))
+## file_matches <- results_files[!is.na(file_matches)]
+## file_matches <- file_matches[-c(6, 8, 10, 12, 18, 20, 22, 24)]
+
+file_matches <- results_files[-c(1:6)]
+file_matches
 
 
-file_matches <- stringr::str_extract(results_files, "results_n1000_p1000_coef1_escale(-?\\d+\\.?\\d*)_mscale(\\d+\\.?\\d*)_yalpha[0-1]+_estpropensity(TRUE|FALSE)") 
-file_matches <- results_files[!is.na(file_matches)]
-file_matches <- file_matches[-c(6, 8, 10, 12, 18, 20, 22, 24)]
-
-rmse_table <- matrix(nrow=8, ncol=length(file_matches))
+rmse_table <- matrix(nrow=10, ncol=length(file_matches))
 table_colnames <- c()
 count <- 1
 
@@ -164,11 +131,10 @@ yalpha_vec <- c()
 
 for(fn in file_matches){
 
-    file_path <- paste0("results_1/", fn)
+    file_path <- paste(results_dir, fn, sep="/")
 
     load(file_path)
-    params <- stringr::str_match(fn,
-                                 "results_n(\\d+)_p(\\d+)_coef([0-9])+_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_estpropensity(TRUE|FALSE)")
+    params <- stringr::str_match(fn, "results_n(\\d+)_p(\\d+)_coef([0-9])+_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_estpropensity(TRUE|FALSE)")
 
     n <- as.numeric(params[2])
     p <- as.numeric(params[3])
@@ -181,8 +147,8 @@ for(fn in file_matches){
     rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
     rmse_table[, count] <- c(rmse_mat[c("Naive", "Regression", "IPW", "AIPW"), 1],
-                             rmse_mat[c("IPW_d", "AIPW_d"), "0"],
-                             rmse_mat[c("IPW_d", "AIPW_d"), "-1"])
+                             rmse_mat[c("IPW_d_oracle", "IPW_d", "AIPW_d"), "0"],
+                             rmse_mat[c("IPW_d_oracle", "IPW_d", "AIPW_d"), "-1"])
     
     table_colnames <-  c(table_colnames, paste(coef, escale, mscale, yalpha, estimated_propensity, sep=","))
 
@@ -193,31 +159,30 @@ for(fn in file_matches){
     count <- count + 1
 }
 
-rownames(rmse_table) <- c("Naive", "Regression", "IPW", "AIPW", "IPW-d(0)", "AIPW-d(0)", "IPW-d(-1)", "AIPW-d(-1)")
+rownames(rmse_table) <- c("Naive", "Regression", "IPW", "AIPW", "IPW-oracle-d(0)", "IPW-d(0)", "AIPW-d(0)", "IPW-oracle-d(1)", "IPW-d(-1)", "AIPW-d(-1)")
 
 rmse_table <- apply(rmse_table, 2, function(x) {
     x <- round(x, 2)
     min_index <- which.min(x)
-    x[min_index] <- paste0("BOLD", x[min_index])
+    x[min_index] <- paste0("textbf{", x[min_index], "}")
     x
 })
 
-addtorow <- list()
-addtorow$pos <- list(0, 1)
-addtorow$command <- c(paste0(paste0('& \\multicolumn{12}{cc}{', unique(escale_vec), '}', collapse=''), '\\\\'),
-                      paste0(paste0('& \\multicolumn{12}{c}{', 1:2, '}', collapse=''), '\\\\'))
+## overlap_colname <- c("High Overlap"=8, "Low Overlap"=8)
+## snr_colname <- rep(c("High SNR"=4, "Low SNR"=4), 2)
+## yalpha_colname <- rep(2, 8)
+## names(yalpha_colname) <- rep(c("R", "L"), 4)
 
-colnames(rmse_table) <- table_colnames
-print.xtable(xtable(rmse_table),
-             sanitize.text.function=bold.somerows)
 
-colnames(rmse_table) <- table_colnames
-print.xtable(xtable(rmse_table),
-             add.to.row = addtorow,
-             sanitize.text.function=bold.somerows,
-             include.colnames = FALSE)
 
-paste0(escale_vec, collapse= " & ")
-paste0(mscale_vec, collapse= " & ")
-paste0(ifelse(yalpha_vec==0, "R", "L"), collapse=" & ")
-paste0(rep(c("F", "T"), 8), collapse=" & ")
+dimension_colname <- c("Lower dimension"=8, "Higher Dimension"=8)
+overlap_colname <- rep(c("High Overlap"=4, "Low Overlap"=4), 2)
+snr_colname <- rep(c("High SNR"=2, "Low SNR"=2), 4)
+yalpha_colname <- rep(1, 16)
+names(yalpha_colname) <- rep(c("R", "L"), 8)
+
+kable(rmse_table, format="latex", align="c", escape=FALSE) %>%
+    add_header_above(c(" ", yalpha_colname)) %>% 
+    add_header_above(c(" ", snr_colname)) %>% 
+    add_header_above(c(" ", overlap_colname)) %>% 
+    add_header_above(c(" ", dimension_colname))

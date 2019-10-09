@@ -1,3 +1,43 @@
+shrinkage_path <- function(tib, nms=NULL) {
+
+    df <- tib
+    df$observation = 1:nrow(df)
+
+    df %>% gather(w, `Propensity Score`, -observation) %>%
+        mutate(w = factor(w, levels=colnames(df))) %>%
+        arrange(desc(w)) %>% 
+        ggplot(aes(y = `Propensity Score`, x = w)) +
+        geom_vline(xintercept=ncol(df)/2, col="red", size=2) +        
+        geom_point() +
+        geom_path(aes(group=observation)) +
+        theme_bw(base_size=16) +
+        scale_x_discrete(labels=nms)
+    
+}
+
+double_shrinkage_plot <- function(baseline_e, e_top, e_bottom, nms=NULL) {
+
+
+    df <- tibble(baseline=baseline_e, top=e_top, bottom=e_bottom)
+
+    if(!is.null(nms))
+        colnames(df) <- nms
+    else
+        nms <- colnames(df)
+    
+    df$observation = 1:nrow(df)
+
+    df %>% gather(Type, `Propensity Score`, -observation) %>%
+        mutate(Type = factor(Type, levels=nms[c(2, 1, 3)])) %>%
+        arrange(desc(Type)) %>% 
+        ggplot(aes(y = `Propensity Score`, x = Type)) +
+        geom_point() +
+        geom_path(aes(group=observation)) +
+        theme_bw()
+ 
+}
+
+
 shrinkage_plot <- function(a, b) {
     plot(x=a, y=rep(1, length(a)), ylim=c(-0.1, 1.1))
     points(x=b, y=rep(0, length(b)))
@@ -22,7 +62,8 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2
 }
 
 estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha=0){
- 
+
+    estimand <- "ATE"
     if (estimand == "ATT"){
         Xfit <- X[T==0, ]
         Yfit <- Y[T==0]
@@ -79,6 +120,9 @@ estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha
         tau_hat <- mean(mhat1) - mean(mhat0)
     }
 
+    mhat1 <- predict(outcome_fit, cbind(0, X[T==1, ]))
+
+    tau_hat <- mean(Y[T==1]) - mean(mhat1)
     
     list(alpha_hat=alpha_hat,
          alpha_hat_normalized=alpha_hat_normalized,

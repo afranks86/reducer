@@ -22,17 +22,18 @@ estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
-escale <- as.numeric(get_attr_default(argv, "escale", 4))
+escale <- as.numeric(get_attr_default(argv, "escale", 1))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
 times <- as.numeric(get_attr_default(argv, "times", 50))
 iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
+
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 4))
 
 n <- as.numeric(get_attr_default(argv, "n", 100))
-p <- as.numeric(get_attr_default(argv, "p", 100))
+p <- as.numeric(get_attr_default(argv, "p", 500))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
