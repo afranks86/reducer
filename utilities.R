@@ -41,7 +41,7 @@ estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha
                                alpha=alpha,
                                penalty.factor=penalty.factor,
                                intercept=FALSE)
-            Y_lambda_min <- cvglm$lambda.min
+            Y_lambda_min <- cvglm$lambda.1se
 
         } else {
 
@@ -50,7 +50,7 @@ estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha
             cvglm <- cv.glmnet(Xfit, Yfit, family="gaussian", 
                                alpha=alpha, penalty.factor = penalty.factor,
                                intercept=FALSE)
-            Y_lambda_min <- cvglm$lambda.min
+            Y_lambda_min <- cvglm$lambda.1se
         }
 
 

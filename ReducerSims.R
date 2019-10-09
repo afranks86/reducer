@@ -30,7 +30,7 @@ eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 times <- as.numeric(get_attr_default(argv, "times", 50))
 iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
-sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 20))
+sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 4))
 
 n <- as.numeric(get_attr_default(argv, "n", 100))
 p <- as.numeric(get_attr_default(argv, "p", 100))
@@ -53,7 +53,7 @@ eigen_debug <- FALSE
 bias_debug <- FALSE
 bias_times <- if(bias_debug) 1 else times
 
-w2_scale_vec <- c(seq(1, -1, by=-.1))
+w2_scale_vec <- c(seq(1, -1, by=-.2))
 
 results_array <- array(dim=c(iters, 9, length(w2_scale_vec)))
 w2lim_true_vec <- numeric(iters)
@@ -73,8 +73,12 @@ for(iter  in 1:iters) {
     ## #################
     
     if(coef_setting == 1){
-        alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
-        beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+        #alpha <-  1 / (1 + (23 * (0:(length(beta.main) - 1))) %% length(beta.main))
+        alpha <- 1 / (1:p)
+        alpha <- alpha / sqrt(sum(alpha^2))
+        #alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
+        #beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
+        beta <- c(rep(1/40, 50), rep(0, p-50))
     } else {
         alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
         beta <- c(-1, 0.75, 1, rep(0, p-3))/sqrt(3)
@@ -212,8 +216,13 @@ for(iter  in 1:iters) {
         # at w2 = w2_lim, d(X) = e(X); at w2 = -w2_lim, d(X) = mhat(X)
         w2_lim <- -sqrt(abs(mvals[2]))
         w2 <- w2scale * w2_lim
-
-        residual <- Y - X %*% alpha_hat - T * tau_hat
+        
+        if(estimand == "ATT") {
+            residual <- 0 + (1-T) * (Y - X %*% alpha_hat)
+        }
+        else {
+            residual <- Y - X %*% alpha_hat - T * tau_hat
+        }
         
         ## Compute IPW_d, using reduced d 
         ## w2 is the tuning parameter for how similar d is to to ehat vs mhat,
