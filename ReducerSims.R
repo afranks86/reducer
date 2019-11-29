@@ -2,6 +2,10 @@ library(mvtnorm)
 library(rstiefel)
 library(glmnet)
 library(lubridate)
+library(WeightIt)
+library(balanceHD)
+library(ebal)
+library(cobalt)
 library(R.utils)
 source("utilities.R")
 
@@ -55,7 +59,7 @@ bias_times <- if(bias_debug) 1 else times
 
 w2_scale_vec <- c(seq(1, -1, by=-.2))
 
-results_array <- array(dim=c(iters, 9, length(w2_scale_vec)))
+results_array <- array(dim=c(iters, 10, length(w2_scale_vec)))
 w2lim_true_vec <- numeric(iters)
 
 eta_matrix <- matrix(NA, nrow=iters, ncol=length(w2_scale_vec))
@@ -63,7 +67,7 @@ eta_matrix <- matrix(NA, nrow=iters, ncol=length(w2_scale_vec))
 dimnames(results_array) <- list(1:iters,
                                 c("Regression", "IPW", "IPW_d", "IPW_d_oracle",
                                   "IPW_clip", "AIPW", "AIPW_d", "AIPW_clip",
-                                  "Naive"),
+                                  "Naive", "BalanceHD"),
                                 w2_scale_vec)
 
 for(iter  in 1:iters) {
@@ -73,11 +77,8 @@ for(iter  in 1:iters) {
     ## #################
     
     if(coef_setting == 1){
-        #alpha <-  1 / (1 + (23 * (0:(length(beta.main) - 1))) %% length(beta.main))
         alpha <- 1 / (1:p)
         alpha <- alpha / sqrt(sum(alpha^2))
-        #alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
-        #beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
         beta <- c(rep(1/40, 50), rep(0, p-50))
     } else {
         alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
@@ -180,8 +181,9 @@ for(iter  in 1:iters) {
 
         next
     }
-
-
+    
+    ## balanceHD (Wager and Athey)
+    residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1)
 
     ## ####################################
     ## Compute hyperbola for reduction
@@ -275,11 +277,11 @@ for(iter  in 1:iters) {
         results_array[iter, "IPW", j] <- ipw
         results_array[iter, "IPW_clip", j] <- ipw_clip
         results_array[iter, "AIPW", j] <- aipw
-        results_array[iter, "AIPW_clip", ] <- aipw_clip
+        results_array[iter, "AIPW_clip", j] <- aipw_clip
+        results_array[iter, "BalanceHD", j] <- residual_balance
 
-
-        print(sprintf("Naive: %.3f, Reg: %.3f, IPW: %.3f, IPW-clip: %.3f, IPW-d: %.3f, IPW-d-oracle: %.3f, AIPW: %.3f, AIPW-clip: %.3f, AIPW-d: %.3f",
-                      naive, tau_hat, ipw, ipw_clip,
+        print(sprintf("Naive: %.3f, Reg: %.3f, IPW: %.3f, IPW-clip: %.3f, BalanceHD: %.3f, IPW-d: %.3f, IPW-d-oracle: %.3f, AIPW: %.3f, AIPW-clip: %.3f, AIPW-d: %.3f",
+                      naive, tau_hat, ipw, ipw_clip, residual_balance,
                       ipw_d, results_array[iter, "IPW_d_oracle", j],
                       aipw, aipw_clip, aipw_d))
     }
