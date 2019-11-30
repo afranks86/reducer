@@ -63,7 +63,7 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2
 
 estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha=0){
 
-    estimand <- "ATE"
+    ## estimand <- "ATE"
     if (estimand == "ATT"){
         Xfit <- X[T==0, ]
         Yfit <- Y[T==0]
@@ -120,10 +120,6 @@ estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha
         tau_hat <- mean(mhat1) - mean(mhat0)
     }
 
-    mhat1 <- predict(outcome_fit, cbind(0, X[T==1, ]))
-
-    tau_hat <- mean(Y[T==1]) - mean(mhat1)
-    
     list(alpha_hat=alpha_hat,
          alpha_hat_normalized=alpha_hat_normalized,
          tau_hat=tau_hat,
