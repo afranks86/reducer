@@ -4,14 +4,16 @@ library(superheat)
 library(patchwork)
 library(RColorBrewer)
 library(kableExtra)
+library(modelr)
 
-results_dir <- "results_20191008PM"
+results_dir <- "results"
 
 results_files <- dir(results_dir)
+results_files  <- results_files[grepl("2019-11-", results_files)]
 
-cols <- brewer.pal(5, "Set1")
-cols_vec <- cols[c(1, 1, 1, 2, 2, 2, 3, 4, 5)]
-lty_vec <- c("solid", "dashed", "dotted")[c(2, 3, 1, 2, 3, 1, 1, 1, 1)]
+cols <- brewer.pal(8, "Set1")
+cols_vec <- cols[c(1, 1, 1, 8, 2, 2, 2, 3, 4, 5)]
+lty_vec <- c("solid", "dashed", "dotted")[c(2, 3, 1, 1, 2, 3, 1, 1, 1, 1)]
 
 for(i in 1:length(results_files)) {
 
@@ -36,11 +38,28 @@ for(i in 1:length(results_files)) {
     bias_mat <- apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE))
     var_mat <- rmse_mat^2 - bias_mat^2
 
+    se_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) sd(x, na.rm=TRUE))/100)
+    se_tib  <- as_tibble(t(se_mat))
+    se_tib$W <- as.numeric(colnames(rmse_mat))
+    
     
     tib <- as_tibble(t(rmse_mat))
+
     tib$W <- as.numeric(colnames(rmse_mat))
+
+    tib2  <- inner_join(tib %>% gather(key=Type, value=RMSE, -W),
+                        se_tib  %>% gather(key=Type, value=se, -W),
+                        by=c("W", "Type"))
+    
     rmse_plot <- tib %>% gather(key=Type, value=RMSE, -W) %>%
         ggplot() + geom_line(aes(x=W, y=RMSE, col=Type, linetype=Type)) +
+        theme_bw() + theme(legend.position="none") +
+        scale_color_manual(values=cols_vec) +
+        scale_linetype_manual(values=lty_vec) +
+        xlab(expression(w[2]))
+    
+    rmse_plot <- tib2 %>%  ggplot() + geom_line(aes(x=W, y=RMSE, col=Type, linetype=Type)) +
+        geom_linerange(aes(x=W, ymin=sqrt(RMSE^2-1.96*se), ymax=sqrt(RMSE^2+1.96*se), col=Type, linetype=Type), size=0.2) +
         theme_bw() + theme(legend.position="none") +
         scale_color_manual(values=cols_vec) +
         scale_linetype_manual(values=lty_vec) +
@@ -102,7 +121,7 @@ for(i in 1:length(results_files)) {
     ##     plot_annotation(title = plot_title,
     ##                     subtitle = subtitle)
     
-    ggsave(filename=sprintf("figs_20191008PM/%s.pdf", plot_name), width=7, height=3)
+    ggsave(filename=sprintf("figs/%s.pdf", plot_name), width=7, height=3)
     
 }
 
