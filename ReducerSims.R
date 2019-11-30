@@ -13,8 +13,8 @@ argv <- R.utils::commandArgs(trailingOnly=TRUE, asValues=TRUE)
 
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
-Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 0))
-Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 0))
+Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 1))
+Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 1))
 
 EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", TRUE))
 PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
@@ -23,10 +23,10 @@ T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
-tau <- as.numeric(get_attr_default(argv, "tau", 1))
+tau <- as.numeric(get_attr_default(argv, "tau", 0))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 5))
-escale <- as.numeric(get_attr_default(argv, "escale", 1))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 10))
+escale <- as.numeric(get_attr_default(argv, "escale", 4))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -79,7 +79,8 @@ for(iter  in 1:iters) {
     if(coef_setting == 1){
         alpha <- 1 / (1:p)
         alpha <- alpha / sqrt(sum(alpha^2))
-        beta <- c(rep(1/40, 50), rep(0, p-50))
+        beta  <- c(rep(-1, p/2), rep(0, p-p/2))
+        beta <- beta / sqrt(sum(beta^2))
     } else {
         alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
         beta <- c(-1, 0.75, 1, rep(0, p-3))/sqrt(3)
@@ -183,7 +184,7 @@ for(iter  in 1:iters) {
     }
     
     ## balanceHD (Wager and Athey)
-    residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1)
+    residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1, alpha=yalpha)
 
     ## ####################################
     ## Compute hyperbola for reduction
@@ -249,7 +250,8 @@ for(iter  in 1:iters) {
         ## Standard AIPW
         aipw <- tau_hat +
             ipw_est(ehat_match, T, residual, estimand, hajek=TRUE)
-
+        if(is.na(aipw))
+            
         ## Compute clipped estimators
         ehat_clip <- ehat
         ehat_clip[ehat < eta] <- eta
@@ -293,6 +295,6 @@ sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
 save(results_array, true_ate, w2lim_true_vec, eta_matrix, 
-     file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s_%s.RData",
-                  n, p, coef_setting, escale, mscale, Y_ALPHA, EST_PROPENSITY, estimand,
+     file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_talpha%i_estpropensity%s_%s_%s.RData",
+                  n, p, coef_setting, escale, mscale, Y_ALPHA, T_ALPHA, EST_PROPENSITY, estimand,
                   gsub(" ", "", now(), fixed=TRUE)))
