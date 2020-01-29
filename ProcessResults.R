@@ -9,11 +9,12 @@ library(modelr)
 results_dir <- "results"
 
 results_files <- dir(results_dir)
-results_files  <- results_files[grepl("2019-11-", results_files)]
+## results_files  <- results_files[grepl("2019-11-30", results_files)]
+results_files  <- results_files[length(results_files)]
 
 cols <- brewer.pal(8, "Set1")
-cols_vec <- cols[c(1, 1, 1, 8, 2, 2, 2, 3, 4, 5)]
-lty_vec <- c("solid", "dashed", "dotted")[c(2, 3, 1, 1, 2, 3, 1, 1, 1, 1)]
+cols_vec <- cols[c(1, 1, 1, 8, 8, 2, 2, 2, 3, 4, 5)]
+lty_vec <- c("solid", "dashed", "dotted")[c(2, 3, 1, 1, 2, 2, 3, 1, 1, 1, 1)]
 
 for(i in 1:length(results_files)) {
 
@@ -24,15 +25,16 @@ for(i in 1:length(results_files)) {
 
     load(file_path)
     params <- stringr::str_match(file_name,
-                                 "results_n(\\d+)_p(\\d+)_coef([0-9])+_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_estpropensity(TRUE|FALSE)_([ATE]+)")
+                                 "results_n(\\d+)_p(\\d+)_coef([0-9])+_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_talpha(\\d+)_estpropensity(TRUE|FALSE)_([ATE]+)")
     n <- as.numeric(params[2])
     p <- as.numeric(params[3])
     coef <- as.numeric(params[4])
     escale <- as.numeric(params[5])
     mscale <- as.numeric(params[6])
     yalpha <- as.numeric(params[7])
-    estimated_propensity <- as.logical(params[8])
-    estimand <- params[9]
+    talpha <- as.numeric(params[8])
+    estimated_propensity <- as.logical(params[9])
+    estimand <- params[10]
     
     rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
     bias_mat <- apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE))
@@ -106,8 +108,8 @@ for(i in 1:length(results_files)) {
 
     ## Plot
     
-    plot_name <- sprintf("results_n%i_p%i_coef%i_escale%.2f_mscale%.2f_yalpha%i_estpropensity=%s_%s",
-                         n, p, coef, escale, mscale, yalpha, estimated_propensity, estimand)
+    plot_name <- sprintf("results_n%i_p%i_coef%i_escale%.2f_mscale%.2f_yalpha%i_talpha%i_estpropensity=%s_%s",
+                         n, p, coef, escale, mscale, yalpha, talpha, estimated_propensity, estimand)
 
     ab_dot_prod_round <- round(ab_dot_prod, 2)
     subtitle <- bquote("n=" ~.(n) ~ ", p=" ~.(p) ~ "," ~ s[T] == .(escale) ~ "," ~ s[Y] == .(mscale) ~ "," ~ alpha^T ~ beta ~ "=" ~ .(ab_dot_prod_round))

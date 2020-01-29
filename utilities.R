@@ -61,71 +61,56 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2
     list(X=X, T=T, Y=Y, m=m, xb=xb, e=e)
 }
 
-estimate_outcome <- function(X, T, Y, estimand, cv=TRUE, Y_lambda_min=115, alpha=0){
-
-    ## estimand <- "ATE"
-    if (estimand == "ATT"){
-        Xfit <- X[T==0, ]
-        Yfit <- Y[T==0]
-        Xpred <- X[T==1, ]
-        penalty.factor <- rep(1, p)
-    } else {
-        Xfit <- cbind(T, X)
-        Yfit <- Y
-        penalty.factor <- c(0, rep(1, p))
-    }
-
-    if(cv){
-        if(estimand == "ATT") {
-
-            cvglm <- cv.glmnet(Xfit, Yfit, family="gaussian", 
-                               alpha=alpha,
-                               penalty.factor=penalty.factor,
-                               intercept=FALSE)
-            Y_lambda_min <- cvglm$lambda.1se
-
-        } else {
-
-            ## For ATE regression doesn't penalize T coefficient
-
-            cvglm <- cv.glmnet(Xfit, Yfit, family="gaussian", 
-                               alpha=alpha, penalty.factor = penalty.factor,
-                               intercept=FALSE)
-            Y_lambda_min <- cvglm$lambda.1se
-        }
+estimate_outcome <- function(X, T, Y, estimand, alpha=0,
+                             include_intercept=TRUE,
+                             scale_X = FALSE) {
 
 
-    }
+  if (scale_X) {
+    scl = apply(X, 2, sd, na.rm = TRUE)
+    is.binary = apply(X, 2, function(xx) sum(xx == 0) + sum(xx == 1) == length(xx))
+    scl[is.binary] = 1
+    Xscl = scale(X, center = FALSE, scale = scl)
+  } else {
+    Xscl = X
+  }
 
-    outcome_fit <- glmnet(Xfit, Yfit, family="gaussian", 
-                          alpha=alpha, penalty.factor = penalty.factor,
-                          intercept=FALSE, 
-                          lambda=Y_lambda_min)
+  ## estimand <- "ATE"
+  if (estimand == "ATT"){
+    Xfit <- X[T==0, ]
+    Yfit <- Y[T==0]
+    Xpred <- X[T==1, ]
 
-    if(estimand == "ATT") {
-        alpha_hat <- coef(outcome_fit)[-1]
-        alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
+  } else {
+    Xfit <- cbind(T, X)
+    Yfit <- Y
+    stop("Not supported in this branch")
+  }
 
-        mhat0 <- predict(outcome_fit, cbind(X[T==0, ]))
-        mhat1 <- predict(outcome_fit, cbind(X[T==1, ]))
+  cvglm <- glmnet::cv.glmnet(Xfit, Yfit, alpha = alpha,
+                             intercept=include_intercept)
+  balance_target  <-  colMeans(X[T==1,])
 
-        tau_hat <- mean(Y[T==1]) - mean(mhat1)
-        
-    } else {
-        alpha_hat <- coef(outcome_fit)[-c(1,2)]
-        alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
-        mhat0 <- predict(outcome_fit, cbind(0, X))
-        mhat1 <- predict(outcome_fit, cbind(1, X))
+  mu_pred <- predict(cvglm, newx = matrix(balance_target, 1, length(balance_target)))
 
-        tau_hat <- mean(mhat1) - mean(mhat0)
-    }
+  fitted_values <- predict(cvglm, newx=Xfit)
 
-    list(alpha_hat=alpha_hat,
-         alpha_hat_normalized=alpha_hat_normalized,
-         tau_hat=tau_hat,
-         mhat0=mhat0,
-         mhat1=mhat1,
-         lambda=Y_lambda_min)
+  tau_hat  <- mean(Y[T==1]) - mu_pred
+
+  intercept   <- coef(cvglm)[1]
+  alpha_hat <- coef(cvglm)[-1]
+  alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
+
+
+  mhat0  <- mu_pred
+  mhat1  <- mean(Y[T==1])
+
+  list(alpha_hat=alpha_hat,
+       alpha_hat_normalized=alpha_hat_normalized,
+       tau_hat=tau_hat,
+       intercept = intercept,
+       mhat0=mhat0,
+       mhat1=mhat1)
 }
 
 estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115,
