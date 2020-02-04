@@ -24,9 +24,9 @@ T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
 tau <- as.numeric(get_attr_default(argv, "tau", 0))
-coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 10))
-escale <- as.numeric(get_attr_default(argv, "escale", 4))
+coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 4))
+escale <- as.numeric(get_attr_default(argv, "escale", 6))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -36,8 +36,8 @@ iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 4))
 
-n <- as.numeric(get_attr_default(argv, "n", 50))
-p <- as.numeric(get_attr_default(argv, "p", 50))
+n <- as.numeric(get_attr_default(argv, "n", 100))
+p <- as.numeric(get_attr_default(argv, "p", 20))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
@@ -76,15 +76,18 @@ for(iter  in 1:iters) {
   ## Generate dataset
   ## #################
 
-  if(coef_setting == 1){
-    alpha <- 1 / (1:p)
-    alpha <- alpha / sqrt(sum(alpha^2))
-    beta  <- c(rep(-1, p/2), rep(0, p-p/2))
-    beta <- beta / sqrt(sum(beta^2))
-  } else {
-    alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
-    beta <- c(-1, 0.75, 1, rep(0, p-3))/sqrt(3)
-  }
+  ## coef_setting is fraction of non-zeros
+  qa <- floor(coef_setting * p)
+  if(qa > p)
+    qa  <- p
+
+  alpha <- c(1 / (1:(qa)), rep(0, p - qa))
+  alpha <- alpha / sqrt(sum(alpha^2))
+
+  qb  <- qa/2
+  beta  <- c(rep(-1, q), rep(0, p-q))
+  beta <- beta / sqrt(sum(beta^2))
+
 
   true_ate <- tau
 
@@ -303,6 +306,6 @@ sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
 save(results_array, true_ate, w2lim_true_vec, eta_matrix, 
-     file=sprintf("results/results_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_talpha%i_estpropensity%s_%s_%s.RData",
-                  n, p, coef_setting, escale, mscale, Y_ALPHA, T_ALPHA, EST_PROPENSITY, estimand,
+     file=sprintf("results/results_n%i_p%i_coef%.2f_escale%.1f_mscale%.1f_yalpha%i_talpha%i_estpropensity%s_%s_%s.RData",
+                  n, p, coef_setting, escale, mscale, Y_ALPHA, T_ALPHA, EST_PROPENSITY, estimand, ab_dot_prod_true,
                   gsub(" ", "", now(), fixed=TRUE)))
