@@ -21,6 +21,8 @@ PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
+AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.75))
+
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
 tau <- as.numeric(get_attr_default(argv, "tau", 0))
@@ -84,9 +86,12 @@ for(iter  in 1:iters) {
   alpha <- c(1 / (1:(qa)), rep(0, p - qa))
   alpha <- alpha / sqrt(sum(alpha^2))
 
-  qb  <- qa/2
-  beta  <- c(rep(-1, q), rep(0, p-q))
-  beta <- beta / sqrt(sum(beta^2))
+  NC  <- rstiefel::NullC(alpha)
+  beta  <- AB_DP*alpha + sqrt(1-AB_DP)*(NC  %*% rustiefel(p-1, 1))
+
+  ## qb  <- qa/2
+  ## beta  <- c(rep(-1, qb), rep(0, p-qb))
+  ## beta <- beta / sqrt(sum(beta^2)) #
 
 
   true_ate <- tau
