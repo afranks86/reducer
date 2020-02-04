@@ -27,7 +27,7 @@ estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
 tau <- as.numeric(get_attr_default(argv, "tau", 0))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 4))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 6))
 escale <- as.numeric(get_attr_default(argv, "escale", 6))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
