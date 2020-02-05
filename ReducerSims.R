@@ -1,4 +1,4 @@
-jlibrary(mvtnorm)
+library(mvtnorm)
 library(rstiefel)
 library(glmnet)
 library(lubridate)
@@ -21,11 +21,12 @@ PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
+# Dot product between outcome and propensity coefficients
 AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.75))
 
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
-tau <- as.numeric(get_attr_default(argv, "tau", 0))
+tau <- as.numeric(get_attr_default(argv, "tau", 1))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 6))
 escale <- as.numeric(get_attr_default(argv, "escale", 6))
@@ -83,7 +84,7 @@ for(iter  in 1:iters) {
   if(qa > p)
     qa  <- p
 
-  alpha <- c(rep(1, qa) / qa, rep(0, p - qa))
+  alpha <- c(rnorm(qa) / qa, rep(0, p - qa))
   alpha <- alpha / sqrt(sum(alpha^2))
 
   NC  <- rstiefel::NullC(alpha)
@@ -194,11 +195,13 @@ for(iter  in 1:iters) {
 
   ## balanceHD (Wager and Athey)
   ## method.fit = "none" does weights only
+  set.seed(0)
   residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1,
                                           alpha=Y_ALPHA)
 
   residual_balance_weights_only <- residualBalance.ate(X, Y, T, target.pop = 1,
                                                        alpha=Y_ALPHA, fit.method="none")
+  
 
   ## ####################################
   ## Compute hyperbola for reduction
@@ -231,9 +234,9 @@ for(iter  in 1:iters) {
 
     print(paste(w2scale, iter, sep=", "))
 
-                                        # w2 limits are determined by the eigenvalue corresponding to the "closed"
-                                        # side of the hyperbola.
-                                        # at w2 = w2_lim, d(X) = e(X); at w2 = -w2_lim, d(X) = mhat(X)
+    # w2 limits are determined by the eigenvalue corresponding to the "closed"
+    # side of the hyperbola.
+    # at w2 = w2_lim, d(X) = e(X); at w2 = -w2_lim, d(X) = mhat(X)
     w2_lim <- -sqrt(abs(mvals[2]))
     w2 <- w2scale * w2_lim
 
