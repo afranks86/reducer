@@ -1,4 +1,4 @@
-library(mvtnorm)
+jlibrary(mvtnorm)
 library(rstiefel)
 library(glmnet)
 library(lubridate)
@@ -36,10 +36,10 @@ times <- as.numeric(get_attr_default(argv, "times", 50))
 iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 
-sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 4))
+sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 1))
 
 n <- as.numeric(get_attr_default(argv, "n", 100))
-p <- as.numeric(get_attr_default(argv, "p", 20))
+p <- as.numeric(get_attr_default(argv, "p", 50))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
@@ -83,12 +83,12 @@ for(iter  in 1:iters) {
   if(qa > p)
     qa  <- p
 
-  alpha <- c(1 / (1:(qa)), rep(0, p - qa))
+  alpha <- c(rep(1, qa) / qa, rep(0, p - qa))
   alpha <- alpha / sqrt(sum(alpha^2))
 
   NC  <- rstiefel::NullC(alpha)
-  beta  <- AB_DP*alpha + sqrt(1-AB_DP)*(NC  %*% rustiefel(p-1, 1))
-
+  beta  <- AB_DP*alpha + sqrt(1-AB_DP^2)*(NC  %*% rustiefel(p-1, 1))
+  
   ## qb  <- qa/2
   ## beta  <- c(rep(-1, qb), rep(0, p-qb))
   ## beta <- beta / sqrt(sum(beta^2)) #
@@ -215,6 +215,9 @@ for(iter  in 1:iters) {
     debug_mvals <- spec$values[c(1,p)]
     debug_mvecs <- spec$vectors[,c(1,p)]
   }
+
+  if(is.na(ab_dot_prod))
+    browser()
 
   ## Depending on correlation between alpha and beta, switch eigenspace labels to
   ## traverse the "closed" side of the hyperbola as we vary the w2 parameter
