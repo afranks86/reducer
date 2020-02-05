@@ -22,12 +22,13 @@ EST_PROPENSITY <- c(FALSE, TRUE)
 all_settings <- expand.grid(np, coef_settings, escale, mscale, y_alpha, EST_PROPENSITY)
 
 option_names <- c('n', 'p',   'coef', 'escale', 'mscale', 'y_alpha', 'est_propensity')
-option_types <- c('%i', '%i', '%i',   '%.1f',   '%.1f',   '%i',      '%s')
+option_types <- c('%i', '%i', '%.1f',   '%.1f',   '%.1f',   '%i',      '%s')
 option_fstring <- paste('--', option_names, '=', option_types, collapse=' ', sep='')
 
 script_fstring <- paste(RSCRIPT_ALIAS, "ReducerSims.R", option_fstring, sprintf("--iters=%i", iters))
 
-logfile_fstring <- "logs/log_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.log"
+logfile_options <- paste(option_names, option_types, collapse='_', sep='')
+logfile_fstring <- paste("logs/log_", logfile_options, "_%s.log", sep='')
 
 run_setting <- function(row){
     row <- unlist(row)
