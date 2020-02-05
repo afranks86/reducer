@@ -11,7 +11,7 @@ iters <- 100
 #y_alpha <- c(0, 1)
 #EST_PROPENSITY <- c(FALSE, TRUE)
 
-np <- list(c(100, 100), c(500, 100), c(1000, 100))
+np <- list(c(500, 100), c(500, 1000))
 coef_settings <- c(0.2, 0.5, 0.8) ## sparsity of outcome model
 ab_dp <- c(0.75) ## Dot product between alpha and beta
 escale <- c(1, 4)
