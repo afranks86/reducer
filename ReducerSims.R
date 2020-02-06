@@ -201,7 +201,10 @@ for(iter  in 1:iters) {
 
   ## balanceHD (Wager and Athey)
   ## method.fit = "none" does weights only
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
   residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1,
                                           alpha=Y_ALPHA)
 
