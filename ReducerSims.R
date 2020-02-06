@@ -27,7 +27,8 @@ AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.75))
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
-coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
+#coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
+coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
 mscale <- as.numeric(get_attr_default(argv, "mscale", 6))
 escale <- as.numeric(get_attr_default(argv, "escale", 6))
 
@@ -39,8 +40,10 @@ iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 1))
 
-n <- as.numeric(get_attr_default(argv, "n", 100))
-p <- as.numeric(get_attr_default(argv, "p", 50))
+#n <- as.numeric(get_attr_default(argv, "n", 100))
+n <- as.numeric(get_attr_default(argv, "n", 500))
+#p <- as.numeric(get_attr_default(argv, "p", 50))
+p <- as.numeric(get_attr_default(argv, "p", 1000))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
@@ -79,10 +82,11 @@ for(iter  in 1:iters) {
   ## Generate dataset
   ## #################
 
-  ## coef_setting is fraction of non-zeros
-  qa <- floor(coef_setting * p)
-  if(qa > p)
-    qa  <- p
+  ## coef_setting controls fraction of non-zeros
+  coef_settings <- c(20, 50, 80)
+  qa <- coef_settings[coef_setting]
+  if(p < qa)
+    qa <- p
 
   alpha <- c(rnorm(qa) / qa, rep(0, p - qa))
   alpha <- alpha / sqrt(sum(alpha^2))

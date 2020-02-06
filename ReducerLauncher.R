@@ -12,7 +12,7 @@ iters <- 100
 #EST_PROPENSITY <- c(FALSE, TRUE)
 
 np <- list(c(500, 100), c(500, 1000))
-coef_settings <- c(0.2, 0.5, 0.8) ## sparsity of outcome model
+coef_settings <- c(1, 2, 3) ## sparsity of outcome model
 ab_dp <- c(0.75) ## Dot product between alpha and beta
 escale <- c(1, 4)
 mscale <- c(5, 10)
@@ -22,7 +22,7 @@ EST_PROPENSITY <- c(TRUE)
 all_settings <- expand.grid(np, coef_settings, escale, mscale, y_alpha, EST_PROPENSITY)
 
 option_names <- c('n', 'p',   'coef', 'escale', 'mscale', 'y_alpha', 'est_propensity')
-option_types <- c('%i', '%i', '%.1f',   '%.1f',   '%.1f',   '%i',      '%s')
+option_types <- c('%i', '%i', '%i',   '%.1f',   '%.1f',   '%i',      '%s')
 option_fstring <- paste('--', option_names, '=', option_types, collapse=' ', sep='')
 
 script_fstring <- paste(RSCRIPT_ALIAS, "ReducerSims.R", option_fstring, sprintf("--iters=%i", iters))
