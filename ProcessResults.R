@@ -6,11 +6,11 @@ library(RColorBrewer)
 library(kableExtra)
 library(modelr)
 
-results_dir <- "results"
+results_dir <- "results_icml"
 
 results_files <- dir(results_dir)
 ## results_files  <- results_files[grepl("2019-11-30", results_files)]
-results_files  <- results_files[length(results_files)]
+#results_files  <- results_files[length(results_files)]
 
 cols <- brewer.pal(8, "Set1")
 cols_vec <- cols[c(1, 1, 1, 8, 8, 2, 2, 2, 3, 4, 5)]
@@ -18,14 +18,16 @@ lty_vec <- c("solid", "dashed", "dotted")[c(2, 3, 1, 1, 2, 2, 3, 1, 1, 1, 1)]
 
 for(i in 1:length(results_files)) {
 
-    file_name <- results_files[i]
-    file_path <- paste0(results_dir, "/", file_name)
+  file_name <- results_files[i]
+  file_name
+  file_path <- paste0(results_dir, "/", file_name)
+
 
     print(file_name)
 
     load(file_path)
     params <- stringr::str_match(file_name,
-                                 "results_n(\\d+)_p(\\d+)_coef([0-9])+_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_talpha(\\d+)_estpropensity(TRUE|FALSE)_([ATE]+)")
+                                 "results_n(\\d+)_p(\\d+)_coef(\\d*[\\.\\d]+)_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_talpha(\\d+)_estpropensity(TRUE|FALSE)_([ATE]+)")
     n <- as.numeric(params[2])
     p <- as.numeric(params[3])
     coef <- as.numeric(params[4])
@@ -37,7 +39,7 @@ for(i in 1:length(results_files)) {
     estimand <- params[10]
     
     rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
-    bias_mat <- apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE))
+    bias_mat <- abs(apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE)))
     var_mat <- rmse_mat^2 - bias_mat^2
 
     se_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) sd(x, na.rm=TRUE))/100)
@@ -74,7 +76,8 @@ for(i in 1:length(results_files)) {
         theme_bw() + theme(legend.position="none") + geom_hline(yintercept=0, linetype=2)  +
         scale_color_manual(values=cols_vec) +
         scale_linetype_manual(values=lty_vec) +
-        xlab(expression(w[2]))
+      xlab(expression(w[2])) +
+      ylab("Absolute Bias")
 
     tib <- as_tibble(t(sqrt(var_mat)))
     tib$W <- as.numeric(colnames(bias_mat))
@@ -84,15 +87,9 @@ for(i in 1:length(results_files)) {
         scale_linetype_manual(values=lty_vec) +
         xlab(expression(w[2]))
 
-    if(coef == 1) {
-        alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
-        beta <- c(1, 0, 1, rep(0, p-3))/sqrt(2)
-        ab_dot_prod <- t(alpha) %*% beta
-    } else {
-        alpha <- c(1, -1, 0, rep(0, p-3))/sqrt(2)
-        beta <- c(-1, 0.75, 1, rep(0, p-3))/sqrt(3)
-        ab_dot_prod <- t(alpha) %*% beta
-    }
+  if(!is.null(ab_dot_prod_true))
+    ab_dot_prod <- ab_dot_prod_true
+
         
 
     if(yalpha == 0) 
@@ -108,7 +105,7 @@ for(i in 1:length(results_files)) {
 
     ## Plot
     
-    plot_name <- sprintf("results_n%i_p%i_coef%i_escale%.2f_mscale%.2f_yalpha%i_talpha%i_estpropensity=%s_%s",
+    plot_name <- sprintf("results_n%i_p%i_coef%.2f_escale%.2f_mscale%.2f_yalpha%i_talpha%i_estpropensity=%s_%s",
                          n, p, coef, escale, mscale, yalpha, talpha, estimated_propensity, estimand)
 
     ab_dot_prod_round <- round(ab_dot_prod, 2)
@@ -122,9 +119,10 @@ for(i in 1:length(results_files)) {
     ## rmse_plot + bias_plot + sd_plot +
     ##     plot_annotation(title = plot_title,
     ##                     subtitle = subtitle)
-    
-    ggsave(filename=sprintf("figs/%s.pdf", plot_name), width=7, height=3)
-    
+    if(estimated_propensity)
+      ggsave(filename=sprintf("figs_icml/%s.pdf", plot_name), width=7, height=3)
+    else
+      ggsave(filename=sprintf("figs_icml_known_pscore/%s.pdf", plot_name), width=7, height=3)
 }
 
 
