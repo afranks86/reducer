@@ -19,7 +19,7 @@ Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 1))
 EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", TRUE))
 PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
-T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
+T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 0))
 
 # Dot product between outcome and propensity coefficients
 AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.75))

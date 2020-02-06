@@ -17,7 +17,7 @@ ab_dp <- c(0.75) ## Dot product between alpha and beta
 escale <- c(1, 4)
 mscale <- c(5, 10)
 y_alpha <- c(0, 1)
-EST_PROPENSITY <- c(FALSE, TRUE)
+EST_PROPENSITY <- c(TRUE)
 
 all_settings <- expand.grid(np, coef_settings, escale, mscale, y_alpha, EST_PROPENSITY)
 
