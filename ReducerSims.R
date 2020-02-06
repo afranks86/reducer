@@ -201,13 +201,11 @@ for(iter  in 1:iters) {
 
   ## balanceHD (Wager and Athey)
   ## method.fit = "none" does weights only
-
   residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1,
                                           alpha=Y_ALPHA)
 
   residual_balance_weights_only <- residualBalance.ate(X, Y, T, target.pop = 1,
                                                        alpha=Y_ALPHA, fit.method="none")
-  
 
   ## ####################################
   ## Compute hyperbola for reduction
