@@ -6,7 +6,7 @@ library(RColorBrewer)
 library(kableExtra)
 library(modelr)
 
-results_dir <- "results_icml"
+results_dir <- "results"
 
 results_files <- dir(results_dir)
 ## results_files  <- results_files[grepl("2019-11-30", results_files)]

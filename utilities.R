@@ -290,6 +290,8 @@ ipw_est <- function(e, T, Y, estimand, hajek=FALSE){
   }
 }
 
-aipw_est <- function(e, T, Y, estimand, hajek=FALSE){
+make_bias_var_plot  <- function() {
+
+
 
 }
