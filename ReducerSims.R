@@ -29,8 +29,8 @@ estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 tau <- as.numeric(get_attr_default(argv, "tau", 1))
 #coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 6))
-escale <- as.numeric(get_attr_default(argv, "escale", 6))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 10))
+escale <- as.numeric(get_attr_default(argv, "escale", 4))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -114,7 +114,7 @@ for(iter  in 1:iters) {
   ## #################
 
   out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, estimand, alpha=Y_ALPHA, include_intercept=TRUE,
-                                               coef_policy="lambda.min", pred_policy="lambda.1se")
+                                               coef_policy="undersmooth", pred_policy="lambda.1se")
               else list()
 
   alpha_hat <- get_attr_default(out_ests, "alpha_hat", alpha)
@@ -201,7 +201,7 @@ for(iter  in 1:iters) {
 
   ## balanceHD (Wager and Athey)
   ## method.fit = "none" does weights only
-  set.seed(0)
+
   residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1,
                                           alpha=Y_ALPHA)
 
