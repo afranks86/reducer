@@ -1,4 +1,4 @@
-jlibrary(mvtnorm)
+library(mvtnorm)
 library(rstiefel)
 library(glmnet)
 library(lubridate)
@@ -14,7 +14,7 @@ argv <- R.utils::commandArgs(trailingOnly=TRUE, asValues=TRUE)
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
 Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 1))
-Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 1))
+Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 0))
 
 EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", TRUE))
 PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
@@ -26,9 +26,9 @@ AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.75))
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
 tau <- as.numeric(get_attr_default(argv, "tau", 0))
-coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 6))
-escale <- as.numeric(get_attr_default(argv, "escale", 6))
+coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.8))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 10))
+escale <- as.numeric(get_attr_default(argv, "escale", 4))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -38,8 +38,8 @@ iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 1))
 
-n <- as.numeric(get_attr_default(argv, "n", 100))
-p <- as.numeric(get_attr_default(argv, "p", 50))
+n <- as.numeric(get_attr_default(argv, "n", 500))
+p <- as.numeric(get_attr_default(argv, "p", 100))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old

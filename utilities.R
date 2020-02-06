@@ -90,10 +90,13 @@ estimate_outcome <- function(X, T, Y, estimand, alpha=0,
   cvglm <- glmnet::cv.glmnet(Xfit, Yfit, alpha = alpha,
                              intercept=include_intercept)
   balance_target  <-  colMeans(X[T==1,])
+  lam <- cvglm$lambda[max(which(cvglm$cvlo < min(cvglm$cvm)))]
+  mu_pred <- predict(cvglm,
+                     newx = matrix(balance_target, 1,
+                                   length(balance_target)),
+                     s=lam)
 
-  mu_pred <- predict(cvglm, newx = matrix(balance_target, 1, length(balance_target)))
-
-  fitted_values <- predict(cvglm, newx=Xfit)
+  fitted_values <- predict(cvglm, newx=Xfit, s=lam)
 
   tau_hat  <- mean(Y[T==1]) - mu_pred
 
