@@ -201,7 +201,14 @@ for(iter  in 1:iters) {
 
   ## balanceHD (Wager and Athey)
   ## method.fit = "none" does weights only
+<<<<<<< HEAD
   
+=======
+<<<<<<< Updated upstream
+
+=======
+>>>>>>> Stashed changes
+>>>>>>> 9d7d25e4792946764175e2c9e771ddd590c9bfc9
   residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1,
                                           alpha=Y_ALPHA)
 
@@ -330,4 +337,4 @@ save(results_array, true_ate, w2lim_true_vec, eta_matrix,
                   gsub(" ", "", now(), fixed=TRUE)))
 
 
-make_bias_var_plot(results_array, true_ate)
+## make_bias_var_plot(results_array, true_ate)
