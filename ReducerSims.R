@@ -40,10 +40,10 @@ iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 1))
 
-#n <- as.numeric(get_attr_default(argv, "n", 100))
-n <- as.numeric(get_attr_default(argv, "n", 500))
-#p <- as.numeric(get_attr_default(argv, "p", 50))
-p <- as.numeric(get_attr_default(argv, "p", 1000))
+n <- as.numeric(get_attr_default(argv, "n", 100))
+#n <- as.numeric(get_attr_default(argv, "n", 500))
+p <- as.numeric(get_attr_default(argv, "p", 50))
+#p <- as.numeric(get_attr_default(argv, "p", 1000))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
@@ -113,16 +113,18 @@ for(iter  in 1:iters) {
   ## Set nuisance parameters
   ## #################
 
-  out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, estimand, alpha=Y_ALPHA, include_intercept=TRUE)
+  out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, estimand, alpha=Y_ALPHA, include_intercept=TRUE,
+                                               coef_policy="lambda.min", pred_policy="lambda.1se")
               else list()
 
   alpha_hat <- get_attr_default(out_ests, "alpha_hat", alpha)
   outcome_intercept <- get_attr_default(out_ests, "intercept", 0)
   alpha_hat_normalized <- get_attr_default(out_ests, "alpha_hat_normalized",
                                            alpha / sqrt(sum(alpha^2)))
-  mhat0 <- get_attr_default(out_ests, "mhat0", X %*% alpha)
-  mhat1 <- get_attr_default(out_ests, "mhat1", X %*% alpha + tau)
+  mhat0 <- get_attr_default(out_ests, "mhat0", mean(X %*% alpha))
+  mhat1 <- get_attr_default(out_ests, "mhat1", mean(Y[T==1]))
   tau_hat <- get_attr_default(out_ests, "tau_hat", tau)
+  outcome_preds <- get_attr_default(out_ests, "preds", X %*% alpha)
 
   if(EST_PROPENSITY) {
     prop_ests <- estimate_propensity(X, T, cv=PROP_CV,
@@ -245,9 +247,11 @@ for(iter  in 1:iters) {
     w2 <- w2scale * w2_lim
 
     if(estimand == "ATT") {
-      residual <- 0 + (1-T) * (Y - X %*% alpha_hat - outcome_intercept)
+      #residual <- 0 + (1-T) * (Y - X %*% alpha_hat - outcome_intercept)
+      residual <- 0 + (1-T) * (Y - outcome_preds)  
     }
     else {
+      warning("Good behavior not guarnateed.")
       residual <- Y - X %*% alpha_hat - T * tau_hat - outcome_intercept
     }
 

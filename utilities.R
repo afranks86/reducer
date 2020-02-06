@@ -61,9 +61,12 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2
     list(X=X, T=T, Y=Y, m=m, xb=xb, e=e)
 }
 
+
 estimate_outcome <- function(X, T, Y, estimand, alpha=0,
                              include_intercept=TRUE,
-                             scale_X = FALSE) {
+                             scale_X = FALSE,
+                             pred_policy = 'lambda.1se',
+                             coef_policy = 'lambda.min') {
   if (scale_X) {
     scl = apply(X, 2, sd, na.rm = TRUE)
     is.binary = apply(X, 2, function(xx) sum(xx == 0) + sum(xx == 1) == length(xx))
@@ -88,15 +91,21 @@ estimate_outcome <- function(X, T, Y, estimand, alpha=0,
   cvglm <- glmnet::cv.glmnet(Xfit, Yfit, alpha = alpha,
                              intercept=include_intercept)
   balance_target  <-  colMeans(X[T==1,])
-
-  mu_pred <- predict(cvglm, newx = matrix(balance_target, 1, length(balance_target)))
-
-  fitted_values <- predict(cvglm, newx=Xfit)
+  lambdas <- list('lambda.min' = cvglm$lambda.min,
+                  'lambda.1se' = cvglm$lambda.1se,
+                  'undersmooth' = cvglm$lambda[max(which(cvglm$cvlo < min(cvglm$cvm)))])
+  pred_lam <- lambdas[[pred_policy]]
+  coef_lam <- lambdas[[coef_policy]]
+  mu_pred <- predict(cvglm,
+                     newx = matrix(balance_target, 1,
+                                   length(balance_target)),
+                     s=pred_lam)
+  fitted_values <- predict(cvglm, newx=X, s=pred_lam)
 
   tau_hat  <- mean(Y[T==1]) - mu_pred
 
-  intercept   <- coef(cvglm)[1]
-  alpha_hat <- coef(cvglm)[-1]
+  intercept   <- coef(cvglm, s=coef_lam)[1]
+  alpha_hat <- coef(cvglm, s=coef_lam)[-1]
   alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
 
 
@@ -108,7 +117,8 @@ estimate_outcome <- function(X, T, Y, estimand, alpha=0,
        tau_hat=tau_hat,
        intercept = intercept,
        mhat0=mhat0,
-       mhat1=mhat1)
+       mhat1=mhat1,
+       preds=fitted_values)
 }
 
 estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115,
