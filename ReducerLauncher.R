@@ -11,13 +11,13 @@ iters <- 100
 #y_alpha <- c(0, 1)
 #EST_PROPENSITY <- c(FALSE, TRUE)
 
-np <- list(c(100, 100), c(500, 100), c(1000, 100))
-coef_settings <- c(0.2, 0.5, 0.8) ## sparsity of outcome model
+np <- list(c(500, 100), c(500, 1000))
+coef_settings <- c(1, 2, 3) ## sparsity of outcome model
 ab_dp <- c(0.75) ## Dot product between alpha and beta
 escale <- c(1, 4)
 mscale <- c(5, 10)
 y_alpha <- c(0, 1)
-EST_PROPENSITY <- c(FALSE, TRUE)
+EST_PROPENSITY <- c(TRUE)
 
 all_settings <- expand.grid(np, coef_settings, escale, mscale, y_alpha, EST_PROPENSITY)
 
@@ -27,7 +27,8 @@ option_fstring <- paste('--', option_names, '=', option_types, collapse=' ', sep
 
 script_fstring <- paste(RSCRIPT_ALIAS, "ReducerSims.R", option_fstring, sprintf("--iters=%i", iters))
 
-logfile_fstring <- "logs/log_n%i_p%i_coef%i_escale%.1f_mscale%.1f_yalpha%i_estpropensity%s_%s.log"
+logfile_options <- paste(option_names, option_types, collapse='_', sep='')
+logfile_fstring <- paste("logs/log_", logfile_options, "_%s.log", sep='')
 
 run_setting <- function(row){
     row <- unlist(row)

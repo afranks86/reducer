@@ -61,11 +61,12 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2
     list(X=X, T=T, Y=Y, m=m, xb=xb, e=e)
 }
 
+
 estimate_outcome <- function(X, T, Y, estimand, alpha=0,
                              include_intercept=TRUE,
-                             scale_X = FALSE) {
-
-
+                             scale_X = FALSE,
+                             pred_policy = 'lambda.1se',
+                             coef_policy = 'lambda.min') {
   if (scale_X) {
     scl = apply(X, 2, sd, na.rm = TRUE)
     is.binary = apply(X, 2, function(xx) sum(xx == 0) + sum(xx == 1) == length(xx))
@@ -90,15 +91,21 @@ estimate_outcome <- function(X, T, Y, estimand, alpha=0,
   cvglm <- glmnet::cv.glmnet(Xfit, Yfit, alpha = alpha,
                              intercept=include_intercept)
   balance_target  <-  colMeans(X[T==1,])
-
-  mu_pred <- predict(cvglm, newx = matrix(balance_target, 1, length(balance_target)))
-
-  fitted_values <- predict(cvglm, newx=Xfit)
+  lambdas <- list('lambda.min' = cvglm$lambda.min,
+                  'lambda.1se' = cvglm$lambda.1se,
+                  'undersmooth' = cvglm$lambda[max(which(cvglm$cvlo < min(cvglm$cvm)))])
+  pred_lam <- lambdas[[pred_policy]]
+  coef_lam <- lambdas[[coef_policy]]
+  mu_pred <- predict(cvglm,
+                     newx = matrix(balance_target, 1,
+                                   length(balance_target)),
+                     s=pred_lam)
+  fitted_values <- predict(cvglm, newx=X, s=pred_lam)
 
   tau_hat  <- mean(Y[T==1]) - mu_pred
 
-  intercept   <- coef(cvglm)[1]
-  alpha_hat <- coef(cvglm)[-1]
+  intercept   <- coef(cvglm, s=coef_lam)[1]
+  alpha_hat <- coef(cvglm, s=coef_lam)[-1]
   alpha_hat_normalized <- alpha_hat / sqrt(sum(alpha_hat^2))
 
 
@@ -110,7 +117,8 @@ estimate_outcome <- function(X, T, Y, estimand, alpha=0,
        tau_hat=tau_hat,
        intercept = intercept,
        mhat0=mhat0,
-       mhat1=mhat1)
+       mhat1=mhat1,
+       preds=fitted_values)
 }
 
 estimate_propensity <- function(X, T, cv=TRUE, T_lambda_min=115,
@@ -174,16 +182,14 @@ compute_gammas <- function(ab_dot_prod, mvals, mvecs, w2, times){
     gammas
 }
 
-## TODO: Refactor this and get_bias. Have get_bias only return weights, then call get_bias.
 get_bias_vec <- function(T, Y, X, xb, estimand,
                          mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10,
                          DEBUG=FALSE, alpha_hat_normalized=NA, beta_hat_normalized=NA) {
     
-    ### Compute coefficient vectors gamma corresponding to reductions
-
+    ## Compute many coefficient vectors gamma corresponding to reductions
     gammas <- compute_gammas(ab_dot_prod, mvals, mvecs, w2, times)
 
-    ## Compute corresponding reductions d
+    ## Compute many corresponding reductions d
     dd <- X %*% gammas
     dd_norms <- sqrt(colSums(dd^2))
     dd_normalized <- t(t(dd) / dd_norms)
@@ -208,10 +214,13 @@ get_bias_vec <- function(T, Y, X, xb, estimand,
         integrand <- invlogit(escale * (outer(c1s[i] * dd[,i], c2s[i] * normal_samples, FUN="+")), a=0, b=1)
         e_dd[, i] <- rowMeans(integrand)
     }
-    
-    ## Compute inverse weighted group means -- uses Hajek estimator
+   
+    ## Compute extreme reduced propensity score values 
     eta <- min(mean(apply(e_dd, 2, min)), 1 - mean(apply(e_dd, 2, max)))
     
+    ## Compute inverse weighted group means -- uses Hajek estimator
+    ## First, comput weights for treated and control groups. There will be a vector of weights for each
+    ## distinct reduction d.
     if(estimand == "ATT") {
         trt_wt <- matrix(1, nrow=nrow(e_dd), ncol=ncol(e_dd))
         ctrl_wt <- e_dd / (1-e_dd)
@@ -222,11 +231,15 @@ get_bias_vec <- function(T, Y, X, xb, estimand,
         trt_wt <- 1 / e_dd
         ctrl_wt <- 1 / (1 - e_dd) 
     }
-    
+   
+    ## Compute vectors of weighted means for treated and control groups. 
     trt_wt_means <- colSums((trt_wt * as.vector(Y))[T == 1,,drop=FALSE]) /
         colSums(trt_wt[T == 1,,drop=FALSE])
     ctrl_wt_means <- colSums((ctrl_wt * as.vector(Y))[T == 0,,drop=FALSE]) /
         colSums(ctrl_wt[T == 0,,drop=FALSE])
+    
+    ## Return the means of these differently-weighted means. Since each is unbiased, the mean is also
+    ## unbiased.
     list(bias0=mean(ctrl_wt_means), bias1=mean(trt_wt_means), eta=eta, e_dd=e_dd)
     
 }
