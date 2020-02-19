@@ -192,13 +192,11 @@ for(iter  in 1:iters) {
   ## Thus, the only difference between balanceHD and our reducer method
   ## Is the function that we balance on
   ## ####################################
-
   residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1,
                                           alpha=Y_ALPHA)
 
   residual_balance_weights_only <- residualBalance.ate(X, Y, T, target.pop = 1,
                                                        alpha=Y_ALPHA, fit.method="none")
-  
 
   ## ####################################
   ## Compute hyperbola for reduction
