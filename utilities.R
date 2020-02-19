@@ -5,11 +5,21 @@
 ## First, get valid coeffficients, gamma, for the reducer ('compute_gammas')
 ## The gamma satisfying the deconfounder condition is not-unique (eqn 11),
 ## We then use a Monte Carlo estimator of e_d = E[T | d(X)] (See Appendix D)
-##
-## bias0 is the weigthed control mean
-## bias1 is the weighted treatment mean
-## eta is the most extreme value of e_d
-## e_dd are the inferred reductions
+
+
+## Arguments:
+## T (treatment indicator),  Y (observed outcome), X (covariates)
+## xb: (X'Beta), the inferred fitted values of the propensity score model
+## estimand (ATT),
+## mvecs and mvals (eigevalues and eigenvectors for hyperbola calculation, Thm 1)
+## w2, similarity of the reduction to alpha or beta
+
+## Returns:
+## bias0: the weigthed control mean
+## bias1: the weighted treatment mean
+## e_dd: are the inferred reduced scores E[T|d(X)] for different valid d(X)
+## eta: the most extreme value of e_d
+
 ##################################################
 
 get_bias <- function(T, Y, X, xb, estimand,
