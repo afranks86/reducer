@@ -14,23 +14,22 @@ argv <- R.utils::commandArgs(trailingOnly=TRUE, asValues=TRUE)
 EST_OUTCOME <- as.logical(get_attr_default(argv, "est_outcome", TRUE))
 OUTCOME_CV <- as.logical(get_attr_default(argv, "outcome_cv", TRUE))
 Y_LAMBDA <- as.numeric(get_attr_default(argv, "y_lambda", 1))
-Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 0))
+Y_ALPHA <- as.numeric(get_attr_default(argv, "y_alpha", 1))
 
 EST_PROPENSITY <- as.logical(get_attr_default(argv, "est_propensity", TRUE))
 PROP_CV <- as.logical(get_attr_default(argv, "prop_cv", TRUE))
 T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
-T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 0))
+T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
-# Dot product between outcome and propensity coefficients
-AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.75))
+## Dot product between outcome and propensity coefficients
+AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.4))
 
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
-tau <- as.numeric(get_attr_default(argv, "tau", 1))
-#coef_setting <- as.numeric(get_attr_default(argv, "coef", 0.7))
-coef_setting <- as.numeric(get_attr_default(argv, "coef", 3))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 20))
-escale <- as.numeric(get_attr_default(argv, "escale", 4))
+tau <- as.numeric(get_attr_default(argv, "tau", 5))
+coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 0.5))
+escale <- as.numeric(get_attr_default(argv, "escale", 6))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -40,13 +39,10 @@ iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 1))
 
-n <- as.numeric(get_attr_default(argv, "n", 200))
-#n <- as.numeric(get_attr_default(argv, "n", 500))
-p <- as.numeric(get_attr_default(argv, "p", 100))
-#p <- as.numeric(get_attr_default(argv, "p", 1000))
+n <- as.numeric(get_attr_default(argv, "n", 100))
+p <- as.numeric(get_attr_default(argv, "p", 20))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
-get_bias <- if(use_vectorized) get_bias_vec else get_bias_old
 
 
 print(sprintf("Using mscale: %s", mscale))
@@ -57,8 +53,6 @@ print(sprintf("Running for %s iters", iters))
 print(sprintf("Drawing %s null space vectors", times))
 print(sprintf("Estimating propensity? %s", EST_PROPENSITY))
 
-## w2_scale_vec <- c(seq(0.95, 0.5, by=-0.05))
-## w2_scale_vec <- c(w2_scale_vec, 0, -rev(w2_scale_vec))
 eigen_debug <- FALSE
 bias_debug <- FALSE
 bias_times <- if(bias_debug) 1 else times
@@ -76,13 +70,15 @@ dimnames(results_array) <- list(1:iters,
                                   "Naive", "BalanceHD", "BalanceHD_weights_only"),
                                 w2_scale_vec)
 
+## Generate iters datasets
 for(iter  in 1:iters) {
 
   ## ################
   ## Generate dataset
   ## #################
 
-  ## coef_setting controls fraction of non-zeros
+  ## coef_setting controls the number of non-zeros in the outcome model
+  ## alpha are the coefficients of the outcome model
   coef_settings <- c(20, 50, 80)
   qa <- coef_settings[coef_setting]
   if(p < qa)
@@ -91,16 +87,19 @@ for(iter  in 1:iters) {
   alpha <- c(rnorm(qa) / qa, rep(0, p - qa))
   alpha <- alpha / sqrt(sum(alpha^2))
 
+
+  ## beta are the coefficients of the propensity model
+  ## a random (dense) vector with inner product of AB_DP with alpha
   NC  <- rstiefel::NullC(alpha)
   beta  <- AB_DP*alpha + sqrt(1-AB_DP^2)*(NC  %*% rustiefel(p-1, 1))
   
-  ## qb  <- qa/2
-  ## beta  <- c(rep(-1, qb), rep(0, p-qb))
-  ## beta <- beta / sqrt(sum(beta^2)) #
-
 
   true_ate <- tau
 
+######################
+  ## Linear outcome model and logist treatment model
+  ## Function from utilities.R
+######################
   simdat <- gen_linearY_logisticT(n, p, tau, alpha, beta, mscale, escale, sigma2_y)
 
   X <- simdat$X
@@ -109,12 +108,12 @@ for(iter  in 1:iters) {
   m <- simdat$m
   e <- simdat$e
 
-  ## ################
-  ## Set nuisance parameters
-  ## #################
-
+  ## #############################################
+  ## Fit the outcome model using glmnet (see utilites.R)
+  ## #############################################
+  
   out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, estimand, alpha=Y_ALPHA, include_intercept=TRUE,
-                                               coef_policy="undersmooth", pred_policy="lambda.1se")
+                                               coef_policy="lambda.min", pred_policy="lambda.min")
               else list()
 
   alpha_hat <- get_attr_default(out_ests, "alpha_hat", alpha)
@@ -146,13 +145,12 @@ for(iter  in 1:iters) {
   eta_hat <- pmin(1 - apply(ehat_all, 2, max), apply(ehat_all, 2, min))
 
 
-  ## ##################
-  ## Non-reduced estimands
-  ## ##################
 
-  ## IPW d using true prognostic score and true propensity score
+
+
   alpha_normalized <- alpha/sqrt(sum(alpha^2))
   beta_normalized <- beta/sqrt(sum(beta^2))
+
   ab_dot_prod_true <- as.numeric(t(alpha_normalized) %*% beta_normalized)
   mvecs_true <- cbind((alpha_normalized + beta_normalized) / sqrt(2 + 2 * ab_dot_prod_true),
   (alpha_normalized - beta_normalized) / sqrt(2 - 2 * ab_dot_prod_true))
@@ -162,27 +160,13 @@ for(iter  in 1:iters) {
     mvecs_true <- mvecs_true[, 2:1]
   }
 
-  w2_lim_true <- -sqrt(abs(mvals_true[2]))
-  w2lim_true_vec[iters] <- w2_lim_true
-  for(j in 1:length(w2_scale_vec)) {
 
-    w2scale <- w2_scale_vec[j]
-    bias <- get_bias(T=T, Y=Y, X=X, xb=X %*% beta_normalized,
-                     estimand=estimand,
-                     mvecs=mvecs_true, mvals=mvals_true,
-                     ab_dot_prod=ab_dot_prod_true,
-                     escale=escale,
-                     w2=w2scale*w2_lim_true,
-                     w2lim=w2_lim_true,
-                     times=bias_times,
-                     DEBUG=bias_debug,
-                     alpha_hat_normalized=alpha_normalized,
-                     beta_hat_normalized=beta_normalized)
 
-    ipw_d_oracle <- bias$bias1 - bias$bias0
-    results_array[iter, "IPW_d_oracle", j] <- ipw_d_oracle
-  }
 
+  ## ###################################
+  ## Non-reduced or regularized estimands include regression estimator
+  ## and simple difference in means
+  ## ###############################
   results_array[iter, "Regression", ] <- tau_hat
 
   ## Naive difference in means
@@ -199,8 +183,15 @@ for(iter  in 1:iters) {
     next
   }
 
+  ## ####################################
   ## balanceHD (Wager and Athey)
-  ## method.fit = "none" does weights only
+  ## method.fit = "none" does weights only (no outcome model)
+  ## target.pop=1 means ATT
+  ## When not weights only, the inferred outcome model
+  ## is identical to the one inferred by estimate_outcome
+  ## Thus, the only difference between balanceHD and our reducer method
+  ## Is the function that we balance on
+  ## ####################################
 
   residual_balance <- residualBalance.ate(X, Y, T, target.pop = 1,
                                           alpha=Y_ALPHA)
@@ -211,7 +202,7 @@ for(iter  in 1:iters) {
 
   ## ####################################
   ## Compute hyperbola for reduction
-  ## ##################
+  ## ###################################
 
   ab_dot_prod <- as.numeric(t(alpha_hat_normalized) %*% beta_hat_normalized)
   mvecs <- cbind((alpha_hat_normalized + beta_hat_normalized)/sqrt(2 + 2 * ab_dot_prod),
@@ -234,30 +225,67 @@ for(iter  in 1:iters) {
     mvals <- mvals[2:1]
     mvecs <- mvecs[,2:1]
   }
-    
+
+  ## ######################################################
+  ## IPW_d_oracle
+  ##
+  ## Reduced-IPW estimator based on the true propensity score and true outcome model
+  ## Reductions based on the true propensity score and outcome model
+  ## ######################################################
+  w2_lim_true <- -sqrt(abs(mvals_true[2]))
+  w2lim_true_vec[iters] <- w2_lim_true
+  for(j in 1:length(w2_scale_vec)) {
+
+    w2scale <- w2_scale_vec[j]
+    bias <- get_bias(T=T, Y=Y, X=X, xb=X %*% beta_normalized,
+                     estimand=estimand,
+                     mvecs=mvecs_true, mvals=mvals_true,
+                     ab_dot_prod=ab_dot_prod_true,
+                     escale=escale,
+                     w2=w2scale*w2_lim_true,
+                     w2lim=w2_lim_true,
+                     times=bias_times,
+                     DEBUG=bias_debug,
+                     alpha_hat_normalized=alpha_normalized,
+                     beta_hat_normalized=beta_normalized)
+
+    ipw_d_oracle <- bias$bias1 - bias$bias0
+    results_array[iter, "IPW_d_oracle", j] <- ipw_d_oracle
+  }
+
+
+
+  ## ######################################################
+  ## Compute reduced estimands for grid of w2 value in [-1, 1]
+  ## when j=1, gamma = alpha_hat
+  ## when j=length(w2_scale_vec), gamma = beta_hat
+  ## ######################################################
   for(j in 1:length(w2_scale_vec)) {
     w2scale <- w2_scale_vec[j]
 
     print(paste(w2scale, iter, sep=", "))
 
-    # w2 limits are determined by the eigenvalue corresponding to the "closed"
-    # side of the hyperbola.
-    # at w2 = w2_lim, d(X) = e(X); at w2 = -w2_lim, d(X) = mhat(X)
+    ## w2 limits are determined by the eigenvalue corresponding to the "closed"
+    ## side of the hyperbola.
+    ## at w2 = w2_lim, d(X) = e(X); at w2 = -w2_lim, d(X) = mhat(X)
     w2_lim <- -sqrt(abs(mvals[2]))
     w2 <- w2scale * w2_lim
 
     if(estimand == "ATT") {
-      #residual <- 0 + (1-T) * (Y - X %*% alpha_hat - outcome_intercept)
-      residual <- 0 + (1-T) * (Y - outcome_preds)  
+      residual <- 0 + (1-T) * (Y - outcome_preds)
     }
     else {
-      warning("Good behavior not guarnateed.")
+      warning("ATE not currently supported")
       residual <- Y - X %*% alpha_hat - T * tau_hat - outcome_intercept
     }
 
-    ## Compute IPW_d, using reduced d
-    ## w2 is the tuning parameter for how similar d is to to ehat vs mhat,
-    ## times is the number of reductions to use to compute weighted estimates (larger should reduce variance)
+    ## ############# IPW_d ###################
+    ## Compute IPW_d, by reweighting using reduction d(X)
+    ## 'w2' is the tuning parameter for how similar the deconfounding score
+    ## is to the propensity and prognostic score (w2=0 is equidistant)
+    ## 'times' is the number of Monte Carlo samples to use to compute weighted estimates
+    ## Larger values reduces Monte Carlo variance but increases computation time
+    ## ######################################
     bias <- get_bias(T=T, Y=Y, X=X, xb=xb, estimand=estimand,
                      mvecs=mvecs, mvals=mvals,
                      ab_dot_prod=ab_dot_prod, escale=escale_hat,
@@ -265,10 +293,18 @@ for(iter  in 1:iters) {
                      alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
 
     ipw_d <- bias$bias1 - bias$bias0
-    eta <- bias$eta
-    cache_edd <- bias$e_dd
 
-    ## Find glmnet fit that matches most extreme pscore
+    ## the most extreme reduced propensity score value
+    ## used to compute the comparable clipping estimator
+    eta <- bias$eta
+
+    ## ####################################
+    ## Standard IPW and AIPW estimators
+    ## As a fair comparison with our reducer estimator,
+    ## use the glmfit based on the regularization setting
+    ## for which the most extreme propensity score matches
+    ## the most extreme reduced score e_d (See Figure 3)
+    ## ##################################
     eta_matrix[iter, j] <- eta
     ehat_match <- ehat_all[, which.min(abs(eta_hat - eta))]
 
@@ -281,7 +317,10 @@ for(iter  in 1:iters) {
     if(is.na(aipw))
       browser()
 
-    ## Compute clipped estimators
+    ## ###############################
+    ## Compute IPW and AIPW based on clipped propensity scores
+    ## ###############################
+
     ehat_clip <- ehat
     ehat_clip[ehat < eta] <- eta
     ehat_clip[ehat > 1 - eta] <- 1 - eta
@@ -290,19 +329,26 @@ for(iter  in 1:iters) {
     aipw_clip <- tau_hat +
       ipw_est(ehat_clip, T, residual, estimand, hajek=TRUE)
 
+
+
+    ## ############# AIPW_d ######################################
     ## Compute negative regression bias by balancing on residuals
-    ## w2 is the tuning parameter for how similar to e vs mhat,
-    ## times is the number of reductions to use to compute weighted estimates (larger shoudl reduce variance)
+    ## 'w2' is the tuning parameter for how similar the deconfounding score
+    ## is to the propensity and prognostic score (w2=0 is equidistant)
+    ## 'times' is the number of Monte Carlo samples to use to compute weighted estimates
+    ## Larger values reduces Monte Carlo variance but increases computation time
+    ## ################################################
     bias <- get_bias(T=T, Y=residual, X=X, xb=xb, estimand=estimand,
                      mvecs=mvecs, mvals=mvals,
                      ab_dot_prod=ab_dot_prod, escale=escale_hat,
                      w2=w2, w2lim=w2_lim, times=bias_times, DEBUG=bias_debug,
                      alpha_hat_normalized=alpha_hat_normalized, beta_hat_normalized=beta_hat_normalized)
-    ## bias <- compute_bias(T=T, Y=residual, e_dd=cache_edd, estimand=estimand)
 
     ## Correct bias and compute AIPW_d
     aipw_d <- tau_hat + bias$bias1 - bias$bias0
 
+    ## ###############################################
+    
     results_array[iter, "IPW_d", j] <- ipw_d
     results_array[iter, "AIPW_d", j] <- aipw_d
     results_array[iter, "IPW", j] <- ipw
@@ -320,8 +366,10 @@ for(iter  in 1:iters) {
 
 }
 
+## RMSE
 sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
 
+## MAD
 apply(abs(results_array - true_ate), c(2, 3), function(x) median(x, na.rm=TRUE))
 
 save(results_array, true_ate, w2lim_true_vec, eta_matrix, 
@@ -329,5 +377,5 @@ save(results_array, true_ate, w2lim_true_vec, eta_matrix,
                   n, p, coef_setting, escale, mscale, Y_ALPHA, T_ALPHA, EST_PROPENSITY, estimand, ab_dot_prod_true,
                   gsub(" ", "", now(), fixed=TRUE)))
 
-
-## make_bias_var_plot(results_array, true_ate)
+## RMSE, Bias and Variance as in Figure 2 of paper
+make_bias_var_plot(results_array, true_ate)
