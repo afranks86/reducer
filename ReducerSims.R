@@ -1,3 +1,4 @@
+library(tidyverse)
 library(mvtnorm)
 library(rstiefel)
 library(glmnet)
@@ -22,14 +23,14 @@ T_LAMBDA <- as.numeric(get_attr_default(argv, "t_lambda", 1))
 T_ALPHA <- as.numeric(get_attr_default(argv, "t_alpha", 1))
 
 ## Dot product between outcome and propensity coefficients
-AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.4))
+AB_DP  <- as.numeric(get_attr_default(argv, "ab_dp", 0.75))
 
 estimand <- as.character(get_attr_default(argv, "estimand", "ATT"))
 
-tau <- as.numeric(get_attr_default(argv, "tau", 5))
+tau <- as.numeric(get_attr_default(argv, "tau", 0))
 coef_setting <- as.numeric(get_attr_default(argv, "coef", 1))
-mscale <- as.numeric(get_attr_default(argv, "mscale", 0.5))
-escale <- as.numeric(get_attr_default(argv, "escale", 6))
+mscale <- as.numeric(get_attr_default(argv, "mscale", 2))
+escale <- as.numeric(get_attr_default(argv, "escale", 4))
 
 eta_clip <- as.numeric(get_attr_default(argv, "eta", 0.1))
 
@@ -39,8 +40,8 @@ iters <- as.numeric(get_attr_default(argv, "iters", 50))
 
 sigma2_y <- as.numeric(get_attr_default(argv, "sigma2_y", 1))
 
-n <- as.numeric(get_attr_default(argv, "n", 100))
-p <- as.numeric(get_attr_default(argv, "p", 20))
+n <- as.numeric(get_attr_default(argv, "n", 500))
+p <- as.numeric(get_attr_default(argv, "p", 1000))
 
 use_vectorized <- as.logical(get_attr_default(argv, "vec", TRUE))
 
@@ -161,8 +162,6 @@ for(iter  in 1:iters) {
   }
 
 
-
-
   ## ###################################
   ## Non-reduced or regularized estimands include regression estimator
   ## and simple difference in means
@@ -250,7 +249,6 @@ for(iter  in 1:iters) {
     ipw_d_oracle <- bias$bias1 - bias$bias0
     results_array[iter, "IPW_d_oracle", j] <- ipw_d_oracle
   }
-
 
 
   ## ######################################################
