@@ -15,7 +15,7 @@ np <- list(c(500, 100), c(500, 1000))
 coef_settings <- c(1, 3) ## sparsity of outcome model
 ab_dp <- c(0.75) ## Dot product between alpha and beta
 escale <- c(1, 4)
-mscale <- c(2, 5, 10)
+mscale <- c(2, 5)
 y_alpha <- c(0, 1)
 EST_PROPENSITY <- c(TRUE)
 
