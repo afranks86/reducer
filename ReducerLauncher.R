@@ -2,7 +2,7 @@ library(lubridate)
 library(parallel)
 RSCRIPT_ALIAS <- "/opt/R/3.5.3/bin/Rscript"
 
-iters <- 100 
+iters <- 500 
 
 #np <- list(c(100, 100), c(200, 100), c(1000, 500), c(1000, 1000))
 #coef_settings <- c(1, 2)
@@ -17,7 +17,7 @@ ab_dp <- c(0.75) ## Dot product between alpha and beta
 escale <- c(1, 4)
 mscale <- c(2, 5)
 y_alpha <- c(0, 1)
-EST_PROPENSITY <- c(TRUE)
+EST_PROPENSITY <- c(FALSE)
 
 all_settings <- expand.grid(np, coef_settings, escale, mscale, y_alpha, EST_PROPENSITY)
 
