@@ -114,7 +114,7 @@ for(iter  in 1:iters) {
   ## #############################################
   
   out_ests <- if(EST_OUTCOME) estimate_outcome(X, T, Y, estimand, alpha=Y_ALPHA, include_intercept=TRUE,
-                                               coef_policy="lambda.min", pred_policy="lambda.min")
+                                               coef_policy="lambda.min", pred_policy="lambda.1se")
               else list()
 
   alpha_hat <- get_attr_default(out_ests, "alpha_hat", alpha)
