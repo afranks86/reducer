@@ -22,6 +22,10 @@
 
 ##################################################
 
+library(RColorBrewer)
+library(colorspace)
+library(patchwork)
+
 get_bias <- function(T, Y, X, xb, estimand,
                      mvecs, mvals, ab_dot_prod, escale, w2=0, w2lim, times=10,
                      DEBUG=FALSE, alpha_hat_normalized=NA, beta_hat_normalized=NA) {
@@ -289,7 +293,16 @@ ipw_est <- function(e, T, Y, estimand, hajek=FALSE){
 ## Absolute Bias and SD of all estimators
 ## as a function of w_2
 ####################################
-make_bias_var_plot  <- function(results_array, true_ate) {
+make_bias_var_plot  <- function(results_array, true_ate, cols_vec=NULL, lty_vec=NULL) {
+
+
+
+  if(is.null(cols_vec)) {
+    cols <- brewer.pal(8, "Set1")
+    cols_vec <- cols[c(1, 1, 1, 8, 8, 2, 2, 2, 3, 4, 5)]
+  }
+  if(is.null(lty_vec))
+    lty_vec <- c("solid", "dashed", "dotted")[c(2, 3, 1, 1, 2, 2, 3, 1, 1, 1, 1)]
 
 
   rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
@@ -327,7 +340,8 @@ make_bias_var_plot  <- function(results_array, true_ate) {
                       se_tib  %>% gather(key=Type, value=se, -W),
                       by=c("W", "Type"))
 
-  ## RMSE Plot
+
+    ## RMSE Plot
   rmse_plot <- tib %>% gather(key=Type, value=RMSE, -W) %>%
     ggplot() + geom_line(aes(x=W, y=RMSE, col=Type, linetype=Type)) +
     theme_bw() + theme(legend.position="none") +
