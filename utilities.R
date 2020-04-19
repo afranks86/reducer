@@ -362,8 +362,8 @@ make_bias_var_plot  <- function(results_array, true_ate) {
     scale_linetype_manual(values=lty_vec) +
     xlab(expression(w[2]))
 
-  if(!is.null(ab_dot_prod_true))
-    ab_dot_prod <- ab_dot_prod_true
+  ##if(!is.null(ab_dot_prod_true))
+  ##  ab_dot_prod <- ab_dot_prod_true
 
 
 
@@ -382,7 +382,8 @@ make_bias_var_plot  <- function(results_array, true_ate) {
 
 
 
-  ab_dot_prod_round <- round(ab_dot_prod, 2)
+  ## ab_dot_prod_round <- round(ab_dot_prod, 2)
+  ab_dot_prod_round  <- 0.5
   subtitle <- bquote("n=" ~.(n) ~ ", p=" ~.(p) ~ "," ~ s[T] == .(escale) ~ "," ~ s[Y] == .(mscale) ~ "," ~ alpha^T ~ beta ~ "=" ~ .(ab_dot_prod_round))
 
   rmse_plot + bias_plot + sd_plot +
