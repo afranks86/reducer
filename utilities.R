@@ -119,7 +119,9 @@ compute_gammas <- function(ab_dot_prod, mvals, mvecs, w2, times){
 ## Generate outcomes and treatment assignments according to linear
 ## and logistic specifications
 ##################################################
-gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2_y){
+gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2_y,
+                                  y_intercept=0){
+
   X <- matrix(rnorm(n * p), nrow=n, ncol=p)
 
   m <- mscale * X %*% alpha
@@ -128,7 +130,7 @@ gen_linearY_logisticT <- function(n, p, tau, alpha, beta, mscale, escale, sigma2
   e <- logistic(escale * xb)
 
   T <- rbinom(n, 1, e)
-  Y <- m +  tau * T + rnorm(n, 0, sigma2_y)
+  Y <- y_intercept + m +  tau * T + rnorm(n, 0, sigma2_y)
 
   list(X=X, T=T, Y=Y, m=m, xb=xb, e=e)
 }
@@ -163,6 +165,13 @@ estimate_outcome <- function(X, T, Y, estimand, alpha=0,
     Yfit <- Y[T==0]
     Xpred <- X[T==1, ]
 
+  } else if (estimand == "ATC") {
+
+    Xfit <- X[T==1, ]
+    Yfit <- Y[T==1]
+    Xpred <- X[T==0, ]
+    stop("Not supported in this branch")
+    
   } else {
     Xfit <- cbind(T, X)
     Yfit <- Y
@@ -309,7 +318,7 @@ make_bias_var_plot  <- function(results_array, true_ate, cols_vec=NULL, lty_vec=
   bias_mat <- abs(apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE)))
   var_mat <- rmse_mat^2 - bias_mat^2
 
-  se_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) sd(x, na.rm=TRUE))/100)
+  se_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) sd(x, na.rm=TRUE))/iters)
   se_tib  <- as_tibble(t(se_mat))
   se_tib$W <- as.numeric(colnames(rmse_mat))
 
