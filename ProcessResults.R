@@ -27,7 +27,7 @@ for(i in 1:length(results_files)) {
 
     load(file_path)
     params <- stringr::str_match(file_name,
-                                 "results_n(\\d+)_p(\\d+)_coef(\\d*[\\.\\d]+)_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_talpha(\\d+)_estpropensity(TRUE|FALSE)_([ATE]+)")
+                                 "results_n(\\d+)_p(\\d+)_coef(\\d*[\\.\\d]+)_escale(-?\\d+\\.?\\d*)_mscale(-?\\d+\\.?\\d*)_yalpha(\\d+)_talpha(\\d+)_estpropensity(TRUE|FALSE)_([ATE]+)_(-?\\d+\\.?\\d*)")
     n <- as.numeric(params[2])
     p <- as.numeric(params[3])
     coef <- as.numeric(params[4])
@@ -37,12 +37,14 @@ for(i in 1:length(results_files)) {
     talpha <- as.numeric(params[8])
     estimated_propensity <- as.logical(params[9])
     estimand <- params[10]
+    ab_dot_prod_true <- as.numeric(params[11])
     
     rmse_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) mean(x, na.rm=TRUE)))
     bias_mat <- abs(apply(results_array - true_ate, c(2, 3), function(x) mean(x, na.rm=TRUE)))
     var_mat <- rmse_mat^2 - bias_mat^2
 
-    se_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) sd(x, na.rm=TRUE))/100)
+    iters <- dim(results_array)[1]
+    se_mat <- sqrt(apply((results_array - true_ate)^2, c(2, 3), function(x) sd(x, na.rm=TRUE))/iters)
     se_tib  <- as_tibble(t(se_mat))
     se_tib$W <- as.numeric(colnames(rmse_mat))
     
